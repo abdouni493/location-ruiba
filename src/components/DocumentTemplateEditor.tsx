@@ -250,6 +250,7 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
     setCurrentTemplateId(template.id);
     setEditingField(null);
   };
+  const handleFieldMouseDown = (fieldName: string, e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const field = template?.[fieldName];
     if (!field) return;

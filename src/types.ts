@@ -66,7 +66,7 @@ export interface Car {
   fuelLevel?: 'full' | 'half' | 'quarter' | 'eighth' | 'empty';
   // Statut dérivé des réservations réelles (calculé par getCarsWithRealStatus).
   // Seul 'maintenance' peut être saisi manuellement en base.
-  status?: 'disponible' | 'reserve' | 'louer' | 'maintenance';
+  status?: 'disponible' | 'reserve' | 'louer' | 'maintenance' | 'available';
   // Masquée du site public (visible par défaut). Les vues admin l'affichent quand même.
   isHiddenFromSite?: boolean;
 }
@@ -388,6 +388,12 @@ export interface VehicleInspection {
   notes: string;
   signature?: string;
   createdAt: string;
+  mats?: boolean;
+  spareTire?: boolean;
+  lights?: boolean;
+  windshield?: boolean;
+  wheels?: boolean;
+  suspension?: boolean;
 }
 
 export interface Payment {
@@ -444,7 +450,7 @@ export interface ReservationDetails {
   discountType: 'percentage' | 'fixed';
   advancePayment: number;
   remainingPayment: number;
-  status: 'pending' | 'accepted' | 'confirmed' | 'active' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'confirmed' | 'active' | 'completed' | 'cancelled' | 'terminated';
   // Forfait d'assurance de protection sélectionné (snapshot + référence).
   protectionAssuranceId?: string;
   protectionAssuranceName?: string;

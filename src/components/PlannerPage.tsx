@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Language, ReservationDetails, Client, Car } from '../types';
+import { Language, ReservationDetails, Client, Car, VehicleInspection } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, X, Zap, Gauge, Heart } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
@@ -9,6 +9,7 @@ import { EditReservationForm } from './EditReservationForm';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
 import { SendContractModal } from './SendContractModal';
+import { ClientModal } from './ClientModal';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { getCars } from '../services/carService';
@@ -29,6 +30,40 @@ const ltrPhone = (value: any): string =>
  * Alias of {@link ltrPhone}; named separately for readability at call sites.
  */
 const ltr = ltrPhone;
+
+/**
+ * Open a print window, write the document, and only trigger print() once every
+ * image inside it (logo, car photo, ...) has finished loading — capped at 3s —
+ * so the logo is never missing or half-loaded on the printed page.
+ */
+const printHTMLContent = (content: string, onDone?: () => void) => {
+  const printWindow = window.open('', '', 'height=800,width=900');
+  if (!printWindow) {
+    onDone?.();
+    return;
+  }
+  printWindow.document.write(content);
+  printWindow.document.close();
+  const images = Array.from(printWindow.document.images);
+  const allLoaded = Promise.all(
+    images.map(img =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise<void>(resolve => {
+            img.addEventListener('load', () => resolve());
+            img.addEventListener('error', () => resolve());
+          })
+    )
+  );
+  Promise.race([allLoaded, new Promise<void>(resolve => setTimeout(resolve, 3000))]).then(() => {
+    printWindow.focus();
+    printWindow.print();
+    onDone?.();
+  });
+};
+
+/** localStorage key caching agency settings (with the logo inlined as a data URI). */
+const AGENCY_SETTINGS_CACHE_KEY = 'agency_settings_cache_v1';
 
 interface PlannerPageProps {
   lang: Language;
@@ -157,7 +192,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
             images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
             mileage: dbCar.mileage || 0,
-            status: (dbCar.status || 'disponible') as 'disponible' | 'louer' | 'maintenance' | 'available',
+            status: (dbCar.status || 'disponible') as Car['status'],
           }));
           setCars(mappedCars);
         }
@@ -452,6 +487,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     return (
       <CreateReservationForm
         lang={lang}
+        user={user}
         defaultStatus="confirmed"
         altFlow={currentView === 'create-alt'}
         onBack={async () => {
@@ -983,7 +1019,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     <div className="text-right">
                       <div className="text-xs text-slate-500">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
                       <div className="text-lg font-bold text-green-700">{paidAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                      <div className="text-xs text-slate-400">{lang === 'fr' ? `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} services)` : `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} خدمات)`}</div>
+                      <div className="text-xs text-slate-400">{`(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} ${lang === 'fr' ? 'services' : 'خدمات'})`}</div>
                     </div>
                   </div>
 
@@ -1108,7 +1144,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {/* Print Menu Button */}
                 <div className="relative">
                   <button
-                    ref={el => (buttonRefs.current[reservation.id] = el)}
+                    ref={(el: HTMLButtonElement | null) => { if (el) buttonRefs.current[reservation.id] = el; }}
                     onClick={() => {
                       const btn = buttonRefs.current[reservation.id];
                       if (btn) {
@@ -1336,14 +1372,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             reservation={showPersonalization.reservation}
             type={showPersonalization.type}
             onClose={() => setShowPersonalization(null)}
-            onPrint={(content) => {
-              const printWindow = window.open('', '', 'height=600,width=800');
-              if (printWindow) {
-                printWindow.document.write(content);
-                printWindow.document.close();
-                printWindow.print();
-              }
-            }}
+            onPrint={(content) => printHTMLContent(content)}
           />
         )}
       </AnimatePresence>
@@ -1457,15 +1486,15 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     const dir = conditionsLanguage === 'ar' ? 'rtl' : 'ltr';
                     return (
                       <>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <div className="flex flex-col items-center" style={{ direction: dir }}>
+                          <div className="h-16 w-full border-2 border-blue-900 rounded bg-white mb-3"></div>
+                          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">
                             {template.clientSignatureLabel}
                           </p>
                         </div>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <div className="flex flex-col items-center" style={{ direction: dir }}>
+                          <div className="h-16 w-full border-2 border-blue-900 rounded bg-white mb-3"></div>
+                          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">
                             {template.agencySignatureLabel}
                           </p>
                         </div>
@@ -2307,6 +2336,7 @@ export const PersonalizationModal: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   // Société (company client) state
   const [isSociete, setIsSociete] = useState(false);
   const [societeData, setSocieteData] = useState({
@@ -2429,7 +2459,33 @@ export const PersonalizationModal: React.FC<{
     setShowSearchResults(false);
   };
 
+  // Create a brand-new client (same flow as the reservation interface) and
+  // automatically select it as the second conductor.
+  const handleSaveSecondConductor = async (clientData: Partial<Client>): Promise<void> => {
+    try {
+      const created = await DatabaseService.createClient(clientData as Omit<Client, 'id' | 'createdAt'>);
+      setSecondConductor(created);
+      setSearchQuery('');
+      setSearchResults([]);
+      setShowSearchResults(false);
+      setIsClientModalOpen(false);
+    } catch (err) {
+      console.error('Error creating second conductor:', err);
+      throw new Error(lang === 'fr' ? "Erreur lors de l'enregistrement" : 'خطأ في الحفظ');
+    }
+  };
+
   const loadAgencySettings = async () => {
+    // Show cached settings immediately (logo already inlined as a data URI)
+    // so the header never renders empty while the network request runs.
+    try {
+      const cached = localStorage.getItem(AGENCY_SETTINGS_CACHE_KEY);
+      if (cached) {
+        setAgencySettings(JSON.parse(cached));
+      }
+    } catch {
+      /* corrupt cache — ignore, fresh fetch below overwrites it */
+    }
     try {
       const { data: settings } = await supabase
         .from('website_settings')
@@ -2437,7 +2493,30 @@ export const PersonalizationModal: React.FC<{
         .limit(1)
         .single();
       if (settings) {
-        setAgencySettings(settings);
+        // Inline the logo as a data URI so print windows and previews render
+        // it instantly instead of re-downloading it on every open.
+        let logo = settings.logo;
+        if (logo && !String(logo).startsWith('data:')) {
+          try {
+            const response = await fetch(logo);
+            const blob = await response.blob();
+            logo = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            /* CORS/network failure — keep the original URL */
+          }
+        }
+        const fullSettings = { ...settings, logo };
+        setAgencySettings(fullSettings);
+        try {
+          localStorage.setItem(AGENCY_SETTINGS_CACHE_KEY, JSON.stringify(fullSettings));
+        } catch {
+          /* quota exceeded — cache is an optimization only */
+        }
       }
     } catch (error) {
       console.error('❌ Error loading agency settings:', error);
@@ -2453,6 +2532,7 @@ export const PersonalizationModal: React.FC<{
       contractDate: isFrench ? 'Date du Contrat' : 'تاريخ العقد',
       contractNumber: isFrench ? 'N° de Contrat' : 'رقم العقد',
       client: isFrench ? 'Client' : 'العميل',
+      createdBy: isFrench ? 'Établi par' : 'أنشئ بواسطة',
       rentalPeriod: isFrench ? 'Période de Location' : 'فترة الإيجار',
       departure: isFrench ? 'Départ' : 'المغادرة',
       return: isFrench ? 'Retour' : 'العودة',
@@ -2471,9 +2551,10 @@ export const PersonalizationModal: React.FC<{
       model: isFrench ? 'Modèle' : 'الموديل',
       registration: isFrench ? 'Immatriculation' : 'التسجيل',
       color: isFrench ? 'Couleur' : 'اللون',
-      vin: isFrench ? 'VIN' : 'رقم المحرك',
-      fuel: isFrench ? 'Carburant' : 'الوقود',
+      vin: isFrench ? 'N° de Série' : 'الرقم التسلسلي',
+      type: isFrench ? 'Type' : 'النوع',
       mileage: isFrench ? 'Kilométrage' : 'الكيلومترات',
+      kmPerDay: isFrench ? 'Kilométrage / Jour' : 'الكيلومترات في اليوم',
       pricing: isFrench ? 'Tarification' : 'التسعير',
       pricePerDay: isFrench ? 'Prix par Jour' : 'السعر في اليوم',
       numberOfDays: isFrench ? 'Nombre de Jours' : 'عدد الأيام',
@@ -2485,15 +2566,34 @@ export const PersonalizationModal: React.FC<{
       clientSignature: isFrench ? 'Signature du Client' : 'توقيع العميل',
       agencySignature: isFrench ? "Signature de l'Agence" : 'توقيع الوكالة',
       dateAndSignature: isFrench ? 'Date et signature' : 'التاريخ والتوقيع',
+      statement: isFrench ? 'Déclaration du Locataire' : 'إقرار المستأجر',
+      specialConditions: isFrench ? 'Conditions Spéciales' : 'الشروط الخاصة',
     };
 
-    const conditionsList = isFrench 
-      ? ['Permis de conduire valide', 'Assurance tous risques', 'Caution dépôt', 'Carburant plein', 'État du véhicule accepté', 'Pas de dégâts supplémentaires']
-      : ['رخصة قيادة سارية', 'تأمين شامل', 'ضمان الإيداع', 'خزان ممتلئ', 'حالة المركبة مقبولة', 'لا توجد أضرار إضافية'];
+    const alignStart = isFrench ? 'left' : 'right';
+
+    const statementText = isFrench
+      ? "Avant la prise en charge du véhicule, le locataire a inspecté la voiture à l'intérieur et à l'extérieur. Tout objet en sa possession durant la période de location qui serait contraire à la loi engage sa seule responsabilité et l'expose aux sanctions prévues par la loi."
+      : 'قبل إستلام السيارة قام المستأجر بفحص السيارة من الداخل والخارج، وأي شيء يكون بحوزته في مدة إستئجارها يكون مخالفاً للقانون والعقوبات.';
+
+    const specialConditions = isFrench
+      ? [
+          "1- Toute prolongation doit être signalée par le client 24 heures avant la date d'expiration du contrat de location.",
+          '2- Interdiction de conduire le véhicule avec le carburant de réserve (réserve).',
+          "3- Le renouvellement du contrat de location débute à la date d'expiration du contrat et relève de la responsabilité du client.",
+          "4- Respecter l'heure de retour du véhicule à l'heure convenue."
+        ]
+      : [
+          '1- كل تمديد يجب على الزبون الابلاغ قبل 24 ساعة من تاريخ انتهاء صلاحيات عقد الكراء',
+          '2- عدم قيادة السيارة بوقود احتياطي (réserve)',
+          '3- تجديد عقد الكراء يكون من تاريخ انتهاء العقد من مسؤولية الزبون',
+          '4- احترام موعد دخول السيارة في الوقت المحدد'
+        ];
 
     const hasSecondConductor = !!secondConductor;
     const baseFontSize = hasSecondConductor ? 17 : 18;
     const scaleFactor = 1;
+    const carImageUrl = reservation?.car?.images?.[0] || '';
 
     const html = `
     <!DOCTYPE html>
@@ -2504,7 +2604,7 @@ export const PersonalizationModal: React.FC<{
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-          font-family: 'Segoe UI', Arial, sans-serif;
+          font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
           line-height: ${hasSecondConductor ? '1.4' : '1.45'};
           color: #222;
           background: white;
@@ -2527,39 +2627,52 @@ export const PersonalizationModal: React.FC<{
         }
         .header {
           border-bottom: 3px solid #1a3a8a;
-          padding-bottom: ${hasSecondConductor ? '2px' : '3px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          padding-bottom: ${hasSecondConductor ? '5px' : '7px'};
+          margin-bottom: ${hasSecondConductor ? '5px' : '7px'};
+        }
+        .header-row {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          direction: ltr;
+          gap: 12px;
+        }
+        .header-brand {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
+          min-width: 0;
         }
         .logo {
-          width: ${hasSecondConductor ? '30px' : '35px'};
-          height: ${hasSecondConductor ? '30px' : '35px'};
+          display: block;
+          max-width: ${hasSecondConductor ? '230px' : '270px'};
+          max-height: ${hasSecondConductor ? '110px' : '130px'};
+          width: auto;
+          height: auto;
           object-fit: contain;
-          flex-shrink: 0;
-        }
-        .header-text {
-          flex: 1;
         }
         .agency-name {
           font-size: ${hasSecondConductor ? '18px' : '20px'};
-          font-weight: bold;
+          font-weight: 800;
           color: #1a3a8a;
           text-align: center;
-          margin: 0 0 2px 0;
+          margin: 0 auto 2px;
+          line-height: 1.15;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, Arial, sans-serif;
         }
         .agency-contact {
-          font-size: ${hasSecondConductor ? '7px' : '8px'};
-          color: #555;
-          text-align: center;
-          line-height: 1.2;
-          margin-bottom: 1px;
+          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          color: #333;
+          font-weight: 700;
+          line-height: 1.45;
           display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 6px;
-          align-items: center;
+          flex-direction: column;
+          align-items: flex-end;
+          text-align: right;
+          gap: 2px;
+          flex-shrink: 0;
         }
         .agency-contact-item {
           margin: 0;
@@ -2571,10 +2684,13 @@ export const PersonalizationModal: React.FC<{
           display: none;
         }
         .contract-title {
-          font-size: ${hasSecondConductor ? '12px' : '14px'};
-          color: #555;
+          font-size: ${hasSecondConductor ? '15px' : '17px'};
+          font-weight: 700;
+          color: #333;
           text-align: center;
-          margin-top: 1px;
+          margin: 0;
+          letter-spacing: 0.5px;
+          font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, Arial, sans-serif;
         }
         .header-info {
           display: grid;
@@ -2610,6 +2726,40 @@ export const PersonalizationModal: React.FC<{
           color: #333;
           font-size: ${hasSecondConductor ? '11px' : '12px'};
         }
+        .info-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: ${hasSecondConductor ? '4px' : '6px'};
+          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          border: 1.5px solid #1a3a8a;
+          border-radius: 6px;
+          overflow: hidden;
+        }
+        .info-table td {
+          padding: ${hasSecondConductor ? '4px 7px' : '5px 9px'};
+          border: 1px solid #dbe2f0;
+        }
+        .info-table .it-label {
+          background-color: #eef2fb;
+          font-weight: 700;
+          color: #1a3a8a;
+          white-space: nowrap;
+          width: 11%;
+        }
+        .info-table .it-value {
+          color: #333;
+          font-weight: 500;
+        }
+        .info-table .it-section {
+          background-color: #1a3a8a;
+          color: #fff;
+          font-weight: 700;
+          text-align: center;
+          letter-spacing: 0.6px;
+          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          padding-top: ${hasSecondConductor ? '3px' : '4px'};
+          padding-bottom: ${hasSecondConductor ? '3px' : '4px'};
+        }
         .section {
           margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
           page-break-inside: avoid;
@@ -2618,12 +2768,12 @@ export const PersonalizationModal: React.FC<{
           border: 1px solid #e5e7eb;
         }
         .section.driver-section {
-          background-color: #f0f9ff;
-          border: 1px solid #bfdbfe;
+          background-color: #ffffff;
+          border: 1px solid #cbd5e1;
         }
         .section.vehicle-section {
-          background-color: #f0fdf4;
-          border: 1px solid #bbf7d0;
+          background-color: #ffffff;
+          border: 1px solid #cbd5e1;
         }
         .section.pricing-section {
           background-color: #fffbeb;
@@ -2637,15 +2787,88 @@ export const PersonalizationModal: React.FC<{
           background-color: #faf5ff;
           border: 1px solid #e9d5ff;
         }
-        .section-title {
+        .section.statement-section {
+          background-color: #f8fafc;
+          border: 1px solid #cbd5e1;
+        }
+        .statement-text {
+          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          line-height: 1.6;
+          color: #1f2937;
+          text-align: justify;
+          padding: 2px;
+        }
+        .section.special-section {
+          background-color: #ffffff;
+          border: 1px solid #cbd5e1;
+        }
+        .special-title {
+          color: #b91c1c !important;
+        }
+        .special-list {
+          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          line-height: 1.55;
+          color: #b91c1c;
+        }
+        .special-item {
+          margin: 2px 0;
+        }
+        /* Bottom grid: statement + special conditions on the left, car image on the right */
+        .bottom-grid {
+          display: grid;
+          grid-template-columns: 1.65fr 1fr;
+          gap: ${hasSecondConductor ? '6px' : '8px'};
+          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          align-items: stretch;
+        }
+        .bottom-left {
+          display: flex;
+          flex-direction: column;
+          gap: ${hasSecondConductor ? '6px' : '8px'};
+          min-width: 0;
+        }
+        .bottom-left .section {
+          margin-bottom: 0;
+        }
+        .statement-section.compact {
+          padding: ${hasSecondConductor ? '3px 5px' : '4px 6px'};
+        }
+        .statement-section.compact .statement-text {
           font-size: ${hasSecondConductor ? '11px' : '12px'};
+          line-height: 1.4;
+        }
+        .car-photo-box {
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: #f8fafc;
+          padding: 4px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+        }
+        .car-photo {
+          width: 100%;
+          height: 100%;
+          max-height: ${hasSecondConductor ? '190px' : '220px'};
+          object-fit: cover;
+          border-radius: 4px;
+        }
+        .car-photo-label {
+          font-size: ${hasSecondConductor ? '10px' : '11px'};
+          font-weight: 600;
+          color: #64748b;
+          text-align: center;
+        }
+        .section-title {
+          font-size: ${hasSecondConductor ? '12px' : '13px'};
           font-weight: 700;
-          background-color: #f0f1f3;
-          padding: ${hasSecondConductor ? '2px 3px' : '3px 4px'};
-          border-radius: 2px;
+          background-color: transparent;
+          padding: ${hasSecondConductor ? '2px 0' : '3px 0'};
           margin-bottom: ${hasSecondConductor ? '2px' : '3px'};
-          border-left: 4px solid #2563eb;
           color: #1a3a8a;
+          letter-spacing: 0.3px;
         }
         .section-content {
           display: grid;
@@ -2722,7 +2945,7 @@ export const PersonalizationModal: React.FC<{
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: ${hasSecondConductor ? '13px' : '20px'};
-          margin-top: auto;
+          margin-top: ${hasSecondConductor ? '6px' : '8px'};
           font-size: ${hasSecondConductor ? '13px' : '14px'};
           padding-top: ${hasSecondConductor ? '3px' : '4px'};
         }
@@ -2777,18 +3000,21 @@ export const PersonalizationModal: React.FC<{
             overflow: hidden;
           }
           
-          /* Perfect centering with margins */
-          .page { 
+          /* Perfect centering with margins.
+             When a second conductor is added the contract is taller, so we
+             don't scale it up (and drop the forced min-height) to keep every
+             detail on a single A4 page. */
+          .page {
             margin: 0 auto;
-            padding: 10mm;
+            padding: ${hasSecondConductor ? '8mm' : '10mm'};
             width: 190mm;
-            min-height: 277mm;
+            min-height: ${hasSecondConductor ? 'auto' : '277mm'};
             height: auto;
             box-sizing: border-box;
             border: 2px solid black;
             left: 0;
             right: 0;
-            transform: scale(1.15);
+            transform: scale(${hasSecondConductor ? '1' : '1.15'});
             transform-origin: top center;
           }
           
@@ -2810,61 +3036,53 @@ export const PersonalizationModal: React.FC<{
     </head>
     <body>
       <div class="page">
-        <!-- Header -->
+        <!-- Header: agency name, then logo + contract title + agency info row -->
         <div class="header">
-          ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" class="logo">` : ''}
-          <div class="header-text">
-            <h1 class="agency-name">${agencySettings?.name || 'AGENCY NAME'}</h1>
-            <div class="agency-contact">
-              ${agencySettings?.address ? `<span class="agency-contact-item">${agencySettings.address}</span>` : ''}
-              ${agencySettings?.phone ? `<span class="agency-contact-item">📞 ${ltrPhone(agencySettings.phone)}</span>` : ''}
-              ${agencySettings?.phone_number_2 ? `<span class="agency-contact-item">📱 ${ltrPhone(agencySettings.phone_number_2)}</span>` : ''}
-              ${agencySettings?.bank_number ? `<span class="agency-contact-item">🏦 ${agencySettings.bank_number}</span>` : ''}
+          <h1 class="agency-name">${agencySettings?.name || 'AGENCY NAME'}</h1>
+          <div class="header-row">
+            <div class="header-brand">
+              ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" class="logo">` : ''}
             </div>
             <p class="contract-title">${labels.contractTitle}</p>
+            <div class="agency-contact">
+              ${agencySettings?.address ? `<span class="agency-contact-item">${agencySettings.address}</span>` : ''}
+              ${agencySettings?.phone ? `<span class="agency-contact-item"><strong>walid</strong>: ${ltrPhone(agencySettings.phone)}</span>` : ''}
+              ${agencySettings?.phone_number_2 ? `<span class="agency-contact-item"><strong>elias</strong>: ${ltrPhone(agencySettings.phone_number_2)}</span>` : ''}
+              ${agencySettings?.bank_number ? `<span class="agency-contact-item">${isFrench ? 'Compte' : 'الحساب'}: ${agencySettings.bank_number}</span>` : ''}
+            </div>
           </div>
         </div>
 
-        <!-- Header Info Boxes -->
-        <div class="header-info">
-          <div class="info-box blue">
-            <div class="info-label">📅 ${labels.contractDate}</div>
-            <div class="info-value">${new Date().toLocaleDateString('en-US')}</div>
-          </div>
-          <div class="info-box green">
-            <div class="info-label">🔢 ${labels.contractNumber}</div>
-            <div class="info-value">#${reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : 'N/A'}</div>
-          </div>
-          <div class="info-box amber">
-            <div class="info-label">👤 ${labels.client}</div>
-            <div class="info-value">${reservation?.client?.lastName || 'N/A'}</div>
-          </div>
-        </div>
-
-        <!-- Rental Period -->
-        <div class="section">
-          <div class="section-title">📅 ${labels.rentalPeriod}</div>
-          <div class="section-content full">
-            <div class="field">
-              <div class="field-label">${labels.departure}</div>
-              <div class="field-value">${new Date(reservation?.step1?.departureDate).toLocaleDateString('fr-FR')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.return}</div>
-              <div class="field-value">${new Date(reservation?.step1?.returnDate).toLocaleDateString('fr-FR')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.duration}</div>
-              <div class="field-value">${reservation?.totalDays || 0} ${labels.days}</div>
-            </div>
-          </div>
-        </div>
+        <!-- Contract Info & Rental Period Table -->
+        <table class="info-table">
+          <tbody>
+            <tr>
+              <td class="it-label">${labels.contractDate}</td>
+              <td class="it-value">${new Date().toLocaleDateString('en-US')}</td>
+              <td class="it-label">${labels.contractNumber}</td>
+              <td class="it-value">#${reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : 'N/A'}</td>
+              <td class="it-label">${labels.createdBy}</td>
+              <td class="it-value">${reservation?.createdByName || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td class="it-section" colspan="6">${labels.rentalPeriod}</td>
+            </tr>
+            <tr>
+              <td class="it-label">${labels.departure}</td>
+              <td class="it-value">${new Date(reservation?.step1?.departureDate).toLocaleDateString('fr-FR')}</td>
+              <td class="it-label">${labels.return}</td>
+              <td class="it-value">${new Date(reservation?.step1?.returnDate).toLocaleDateString('fr-FR')}</td>
+              <td class="it-label">${labels.duration}</td>
+              <td class="it-value">${reservation?.totalDays || 0} ${labels.days}</td>
+            </tr>
+          </tbody>
+        </table>
 
         <!-- Driver & Vehicle Info (2 columns) -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <!-- Driver Info -->
           <div class="section driver-section">
-            <div class="section-title">👤 ${labels.driverInfo}</div>
+            <div class="section-title">${labels.driverInfo}</div>
             <div class="section-content">
               <div class="field">
                 <div class="field-label">${labels.fullName}</div>
@@ -2875,15 +3093,15 @@ export const PersonalizationModal: React.FC<{
                 <div class="field-value">${reservation?.client?.licenseNumber || 'N/A'}</div>
               </div>
               <div class="field">
-                <div class="field-label">📅 ${labels.licenseDeliveryDate}</div>
+                <div class="field-label">${labels.licenseDeliveryDate}</div>
                 <div class="field-value">${reservation?.client?.licenseDeliveryDate ? new Date(reservation.client.licenseDeliveryDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
               </div>
               <div class="field">
-                <div class="field-label">⏱️ ${labels.licenseExpirationDate}</div>
+                <div class="field-label">${labels.licenseExpirationDate}</div>
                 <div class="field-value">${reservation?.client?.licenseExpirationDate ? new Date(reservation.client.licenseExpirationDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
               </div>
               <div class="field">
-                <div class="field-label">📍 ${labels.licenseDeliveryPlace}</div>
+                <div class="field-label">${labels.licenseDeliveryPlace}</div>
                 <div class="field-value">${reservation?.client?.licenseDeliveryPlace || ''}</div>
               </div>
               <div class="field">
@@ -2899,7 +3117,7 @@ export const PersonalizationModal: React.FC<{
 
           <!-- Vehicle Info -->
           <div class="section vehicle-section">
-            <div class="section-title">🚗 ${labels.vehicleInfo}</div>
+            <div class="section-title">${labels.vehicleInfo}</div>
             <div class="section-content">
               <div class="field">
                 <div class="field-label">${labels.model}</div>
@@ -2914,7 +3132,7 @@ export const PersonalizationModal: React.FC<{
                 <div class="field-value">${reservation?.car?.color || 'N/A'}</div>
               </div>
               <div class="field">
-                <div class="field-label">${labels.fuel}</div>
+                <div class="field-label">${labels.type}</div>
                 <div class="field-value">${reservation?.car?.energy || 'N/A'}</div>
               </div>
               <div class="field">
@@ -2925,6 +3143,10 @@ export const PersonalizationModal: React.FC<{
                 <div class="field-label">${labels.mileage}</div>
                 <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 'N/A') + ' km')}</div>
               </div>
+              <div class="field">
+                <div class="field-label">${labels.kmPerDay}</div>
+                <div class="field-value">${ltr('300 km')}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -2932,7 +3154,7 @@ export const PersonalizationModal: React.FC<{
         <!-- Second Driver Section (if exists) -->
         ${secondConductor ? `
         <div class="section">
-          <div class="section-title">👥 ${labels.secondDriver}</div>
+          <div class="section-title">${labels.secondDriver}</div>
           <div class="section-content full">
             <div class="field">
               <div class="field-label">${labels.fullName}</div>
@@ -2958,108 +3180,33 @@ export const PersonalizationModal: React.FC<{
         </div>
         ` : ''}
 
-        <!-- Pricing & Conditions (2 columns) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <!-- Pricing -->
-          <div class="section pricing-section">
-            <div class="section-title">💰 ${labels.pricing}</div>
-            <div class="pricing-table">
-              <div class="pricing-row">
-                <span>${labels.pricePerDay}:</span>
-                <span>${reservation?.car?.priceDay || 0} DA</span>
-              </div>
-              <div class="pricing-row">
-                <span>${labels.numberOfDays}:</span>
-                <span>${reservation?.totalDays || 0}</span>
-              </div>
-              <div class="pricing-row total">
-                <span>${labels.totalHT}:</span>
-                <span>${(reservation?.totalPrice || 0).toFixed(2)} DA</span>
-              </div>
-              ${reservation?.tvaApplied ? `
-              <div class="pricing-row">
-                <span>${labels.tva}:</span>
-                <span>${((reservation?.totalPrice || 0) * 0.19).toFixed(2)} DA</span>
-              </div>
-              ` : ''}
-              <div class="pricing-row grand-total">
-                <span>${labels.totalTTC}:</span>
-                <span>${(reservation?.tvaApplied ? ((reservation?.totalPrice || 0) * 1.19) : (reservation?.totalPrice || 0)).toFixed(2)} DA</span>
+        <!-- Statement + Special Conditions (left) with Car Image (right) -->
+        <div class="bottom-grid">
+          <div class="bottom-left">
+            <!-- Locataire Statement -->
+            <div class="section statement-section compact">
+              <div class="statement-text">${statementText}</div>
+            </div>
+
+            <!-- Special Conditions -->
+            <div class="section special-section">
+              <div class="section-title special-title">${labels.specialConditions}</div>
+              <div class="special-list" style="direction: ${textDir}; text-align: ${alignStart};">
+                ${specialConditions.map(c => `<div class="special-item">${c}</div>`).join('')}
               </div>
             </div>
           </div>
 
-          <!-- Conditions -->
-          <div class="section conditions-section">
-            <div class="section-title">✓ ${labels.conditions}</div>
-            <div class="conditions-grid">
-              ${conditionsList.map(condition => `
-                <div class="condition-item">
-                  <div class="checkbox">✓</div>
-                  <span>${condition}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-
-        <!-- Vehicle Inspection Info -->
-        <div class="section inspection-section">
-          <div class="section-title">🔍 ${isFrench ? 'État du Véhicule à la Prise en Charge' : 'حالة المركبة عند الاستلام'}</div>
-          <div class="section-content full">
-            <div class="field">
-              <div class="field-label">📏 ${isFrench ? 'Kilométrage de Départ' : 'كيلومتراج البداية'}</div>
-              <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 0) + ' km')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">⛽ ${isFrench ? 'Niveau de Carburant' : 'مستوى الوقود'}</div>
-              <div class="field-value">${
-                (() => {
-                  const fuelLevel = reservation?.departureInspection?.fuelLevel?.toLowerCase() || '';
-                  const fuelMap = {
-                    'empty': '0',
-                    'vide': '0',
-                    'quarter': '1/4',
-                    'quart': '1/4',
-                    '1/4': '1/4',
-                    'half': '1/2',
-                    'moitié': '1/2',
-                    'demi': '1/2',
-                    '1/2': '1/2',
-                    'three-quarter': '3/4',
-                    'trois-quarts': '3/4',
-                    '3/4': '3/4',
-                    'full': 'Plein',
-                    'plein': 'Plein',
-                    'complet': 'Plein'
-                  };
-                  return fuelMap[fuelLevel] || reservation?.departureInspection?.fuelLevel || 'Plein';
-                })()
-              }</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Special Conditions (Red Text) -->
-        <div style="background-color: #fef2f2; padding: 6px; border: 1px solid #fecaca; border-radius: 4px; margin-bottom: 0px; font-size: 11px; line-height: 1.45;">
-          <div style="color: #dc2626; font-weight: 600; margin-bottom: 2px;">${isFrench ? 'CONDITIONS SPÉCIALES' : 'الشروط الخاصة'}</div>
-          <div style="color: #dc2626; direction: ${textDir}; text-align: ${isFrench ? 'left' : 'right'};">
-            ${isFrench ? `
-              <div style="margin: 1px 0;">1- Tout renouvellement doit être confirmé par le client 48 heures avant la date d'expiration du contrat de location</div>
-              <div style="margin: 1px 0;">2- Interdiction de conduire le véhicule avec le carburant de réserve</div>
-              <div style="margin: 1px 0;">3- Le renouvellement du contrat de location est la responsabilité du client à partir de la date d'expiration du contrat</div>
-              <div style="margin: 1px 0;">4- La non-restitution du contrat de location à la date convenue entraîne une facturation complète du tarif quotidien</div>
-            ` : `
-              <div style="margin: 1px 0;">1- كل تمديد يجب على الزبون اطمئان قبل 48 ساعة من تاريخ انتهاء صلاحيات عقد الكراء</div>
-              <div style="margin: 1px 0;">2- عدم قيادة السيارة بوقود احتياطي (réserve)</div>
-              <div style="margin: 1px 0;">3- تجديد عقد الكراء يكون من تاريخ انتهاء العقد من مسؤولية الزبون</div>
-              <div style="margin: 1px 0;">4- عدم تسليم عقد الكراء على الزبون ينتج مبلغ اليومي كاملا</div>
-            `}
+          <!-- Car Image -->
+          <div class="car-photo-box">
+            ${carImageUrl
+              ? `<img src="${carImageUrl}" alt="${labels.vehicleInfo}" class="car-photo" referrerpolicy="no-referrer">`
+              : `<span class="car-photo-label">${labels.vehicleInfo}</span>`}
           </div>
         </div>
 
         <!-- Signatures -->
-        <div class="signatures" style="margin-top: 0px; padding-top: 4px;">
+        <div class="signatures" style="margin-top: ${hasSecondConductor ? '6px' : '8px'}; padding-top: 10px; border-top: 2px solid #1a3a8a;">
           <div class="signature-block">
             <div class="signature-line"></div>
             <div class="signature-label">${labels.clientSignature}</div>
@@ -4488,7 +4635,7 @@ export const PersonalizationModal: React.FC<{
       signature: 'التوقيع',
     };
 
-    const inspectionData = reservation?.departureInspection || {};
+    const inspectionData: Partial<VehicleInspection> = reservation?.departureInspection || {};
     
     const html = `
     <!DOCTYPE html>
@@ -4762,7 +4909,7 @@ export const PersonalizationModal: React.FC<{
           <div class="details-grid">
             <div class="detail-item">
               <div class="detail-label">${labels.fullName}</div>
-              <div class="detail-value">${reservation?.client?.firstName || reservation?.client?.first_name} ${reservation?.client?.lastName || reservation?.client?.last_name}</div>
+              <div class="detail-value">${reservation?.client?.firstName || (reservation?.client as any)?.first_name} ${reservation?.client?.lastName || (reservation?.client as any)?.last_name}</div>
             </div>
             <div class="detail-item">
               <div class="detail-label">${labels.phone}</div>
@@ -4774,7 +4921,7 @@ export const PersonalizationModal: React.FC<{
             </div>
             <div class="detail-item">
               <div class="detail-label">${labels.licenseNumber}</div>
-              <div class="detail-value">${reservation?.client?.licenseNumber || reservation?.client?.license_number || 'N/A'}</div>
+              <div class="detail-value">${reservation?.client?.licenseNumber || (reservation?.client as any)?.license_number || 'N/A'}</div>
             </div>
           </div>
         </div>
@@ -4884,16 +5031,7 @@ export const PersonalizationModal: React.FC<{
       content = generateContractHTML(selectedTemplate);
     }
     
-    setTimeout(() => {
-      const printWindow = window.open('', '', 'height=600,width=800');
-      if (printWindow) {
-        printWindow.document.write(content);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        setTimeout(() => setIsPrinting(false), 100);
-      }
-    }, 300);
+    printHTMLContent(content, () => setIsPrinting(false));
   };
 
   const getDocumentTitle = (): string => {
@@ -5103,44 +5241,53 @@ export const PersonalizationModal: React.FC<{
                   👥 {lang === 'fr' ? 'Ajouter un Conducteur Secondaire' : 'إضافة سائق ثانوي'}
                 </h3>
                 
-                {/* Search Input */}
-                <div className="relative mb-4">
-                  <input
-                    type="text"
-                    placeholder={lang === 'fr' 
-                      ? 'Tapez le nom, prénom ou numéro de téléphone...' 
-                      : 'اكتب الاسم أو رقم الهاتف...'}
-                    value={searchQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchQuery(value);
-                      if (value.length > 0) {
-                        searchClients(value);
-                      } else {
-                        setSearchResults([]);
-                        setShowSearchResults(false);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (searchQuery.length > 0) {
-                        setShowSearchResults(true);
-                      }
-                    }}
-                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-base"
-                    autoComplete="off"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSearchResults([]);
-                        setShowSearchResults(false);
+                {/* Search Input + New Client */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder={lang === 'fr'
+                        ? 'Tapez le nom, prénom ou numéro de téléphone...'
+                        : 'اكتب الاسم أو رقم الهاتف...'}
+                      value={searchQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        if (value.length > 0) {
+                          searchClients(value);
+                        } else {
+                          setSearchResults([]);
+                          setShowSearchResults(false);
+                        }
                       }}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                    >
-                      ✕
-                    </button>
-                  )}
+                      onFocus={() => {
+                        if (searchQuery.length > 0) {
+                          setShowSearchResults(true);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-base"
+                      autoComplete="off"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSearchResults([]);
+                          setShowSearchResults(false);
+                        }}
+                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setIsClientModalOpen(true)}
+                    className="whitespace-nowrap px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Plus size={18} />
+                    {lang === 'fr' ? 'Nouveau Client' : 'عميل جديد'}
+                  </button>
                 </div>
                 
                 {/* Selected Conductor Display */}
@@ -5209,7 +5356,18 @@ export const PersonalizationModal: React.FC<{
                 )}
               </div>
             )}
-            
+
+            {/* New Client modal — same form used in the reservation interface.
+                On save the client is created and auto-selected as second conductor. */}
+            {type === 'contract' && (
+              <ClientModal
+                isOpen={isClientModalOpen}
+                onClose={() => setIsClientModalOpen(false)}
+                onSave={handleSaveSecondConductor}
+                lang={lang}
+              />
+            )}
+
             <div className="bg-white rounded-lg shadow-lg p-0 mx-auto" style={{ width: '210mm' }}>
               <iframe
                 srcDoc={getCurrentTemplate()}

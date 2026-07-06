@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { sessionService } from '../utils/sessionService';
 import { Car, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
 
 // Generic database service functions
@@ -628,21 +629,112 @@ export class DatabaseService {
   }
 
   static async createWorker(worker: Omit<Worker, 'id' | 'createdAt' | 'advances' | 'absences' | 'payments'>): Promise<Worker> {
-    // Create worker record in database with email and password
     console.log('[DatabaseService] Creating worker:', worker.email);
-    
+
+    const email = (worker.email || '').trim().toLowerCase();
+    const password = worker.password || '';
+
+    // When we have an email + password, create a REAL, email-confirmed Supabase
+    // Auth account for the worker via the server-side admin_create_worker() RPC.
+    // Doing it server-side means:
+    //   • the worker is created already CONFIRMED, so he can sign in immediately
+    //     with signInWithPassword() (no "email not confirmed" error),
+    //   • the admin's own session is NOT switched to the new worker,
+    //   • the full HR row (username, date of birth, address, …) is stored too.
+    if (email && password) {
+      // Make sure the admin's JWT is attached so the RPC's is_admin() check
+      // passes (the RPC refuses anonymous callers to prevent privilege abuse).
+      const authed = await sessionService.ensureSupabaseSession();
+      if (!authed) {
+        throw new Error('ADMIN_SESSION_REQUIRED');
+      }
+
+      const { data: newWorkerId, error: rpcError } = await supabase.rpc('admin_create_worker', {
+        p_email: email,
+        p_password: password,
+        p_full_name: worker.fullName,
+        p_username: worker.username || null,
+        p_phone: worker.phone || null,
+        p_date_of_birth: worker.dateOfBirth || null,
+        p_address: worker.address || null,
+        p_type: worker.type || 'worker',
+        p_role_id: null,
+        p_photo_url: worker.profilePhoto || null,
+        p_base_salary: worker.baseSalary ?? null,
+        p_payment_type: worker.paymentType || null,
+        p_permissions: [],
+      });
+
+      if (rpcError) {
+        console.error('[DatabaseService] admin_create_worker failed:', rpcError);
+        throw rpcError;
+      }
+
+      console.log('[DatabaseService] Worker created successfully:', newWorkerId);
+
+      // Fetch the freshly created row so we return the full, DB-shaped worker.
+      const { data, error } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('id', newWorkerId)
+        .single();
+
+      if (error || !data) {
+        // The worker WAS created; only the read-back failed. Return what we know.
+        console.warn('[DatabaseService] Worker created but read-back failed:', error);
+        return {
+          id: (newWorkerId as string) || '',
+          fullName: worker.fullName,
+          dateOfBirth: worker.dateOfBirth,
+          phone: worker.phone,
+          email,
+          address: worker.address,
+          profilePhoto: worker.profilePhoto,
+          type: worker.type,
+          paymentType: worker.paymentType,
+          baseSalary: worker.baseSalary,
+          username: worker.username,
+          password: worker.password,
+          advances: [],
+          absences: [],
+          payments: [],
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      return {
+        id: data.id,
+        fullName: data.full_name,
+        dateOfBirth: data.date_of_birth,
+        phone: data.phone,
+        email: data.email,
+        address: data.address,
+        profilePhoto: data.profile_photo,
+        type: data.type,
+        paymentType: data.payment_type,
+        baseSalary: data.base_salary,
+        username: data.username,
+        password: data.password,
+        advances: [],
+        absences: [],
+        payments: [],
+        createdAt: data.created_at,
+      };
+    }
+
+    // No login credentials → store an HR-only worker row (cannot log in).
     const dbWorker = {
       full_name: worker.fullName,
       date_of_birth: worker.dateOfBirth,
       phone: worker.phone,
-      email: worker.email,
+      email,
       address: worker.address,
       profile_photo: worker.profilePhoto,
       type: worker.type,
       payment_type: worker.paymentType,
       base_salary: worker.baseSalary,
       username: worker.username,
-      password: worker.password,
+      login_enabled: false,
     };
 
     const { data, error } = await supabase
@@ -656,7 +748,7 @@ export class DatabaseService {
       throw error;
     }
 
-    console.log('[DatabaseService] Worker created successfully:', data.id);
+    console.log('[DatabaseService] HR-only worker created successfully:', data.id);
 
     // Map back to camelCase for the return
     return {

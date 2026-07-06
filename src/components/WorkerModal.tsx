@@ -142,16 +142,22 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onSav
     } catch (err: any) {
       console.error('Error saving worker:', err);
       let errorMsg = lang === 'fr' ? 'Erreur lors de l\'enregistrement du travailleur' : 'خطأ في حفظ العامل';
-      
-      // Handle specific Supabase Auth errors
-      if (err.message) {
-        if (err.message.includes('already registered')) {
-          errorMsg = lang === 'fr' ? 'Cet email est déjà utilisé' : 'هذا البريد الإلكتروني مستخدم بالفعل';
-        } else if (err.message.includes('Auth')) {
-          errorMsg = lang === 'fr' ? 'Erreur d\'authentification: ' + err.message : 'خطأ في المصادقة: ' + err.message;
-        } else {
-          errorMsg = err.message;
-        }
+
+      // Supabase errors expose the DB/RPC message on .message (and sometimes .details).
+      const raw = `${err?.message || ''} ${err?.details || ''} ${err?.hint || ''}`;
+
+      if (raw.includes('EMAIL_ALREADY_EXISTS') || raw.includes('already registered') || raw.includes('duplicate')) {
+        errorMsg = lang === 'fr' ? 'Cet email est déjà utilisé' : 'هذا البريد الإلكتروني مستخدم بالفعل';
+      } else if (raw.includes('ADMIN_SESSION_REQUIRED') || raw.includes('ONLY_ADMIN_CAN_CREATE_WORKER')) {
+        errorMsg = lang === 'fr'
+          ? 'Session administrateur expirée. Veuillez vous reconnecter puis réessayer.'
+          : 'انتهت جلسة المسؤول. يرجى إعادة تسجيل الدخول ثم المحاولة مرة أخرى.';
+      } else if (raw.includes('does not exist') || raw.includes('gen_salt') || raw.includes('crypt(')) {
+        errorMsg = lang === 'fr'
+          ? 'Configuration Supabase manquante : exécutez la migration de la base de données.'
+          : 'إعداد Supabase مفقود: يرجى تشغيل ترحيل قاعدة البيانات.';
+      } else if (err?.message) {
+        errorMsg = err.message;
       }
       setValidationError(errorMsg);
     } finally {

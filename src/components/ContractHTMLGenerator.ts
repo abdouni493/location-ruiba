@@ -119,27 +119,36 @@ export const generateContractHTML = (
           padding: 12px;
           border-radius: 6px;
           margin-bottom: 10px;
-          text-align: center;
+        }
+        .header-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .header-brand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
         }
         .header-logo {
-          width: 40px;
-          height: 40px;
+          width: 54px;
+          height: 54px;
           border-radius: 50%;
           object-fit: cover;
-          margin: 0 auto 8px;
           background: white;
           padding: 2px;
+          flex-shrink: 0;
         }
         .agency-name {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: bold;
-          margin-bottom: 8px;
         }
         .agency-contact {
           font-size: 11px;
           line-height: 1.5;
-          margin: 4px 0;
-          text-align: center;
+          font-weight: bold;
+          text-align: ${textDir === 'ltr' ? 'right' : 'left'};
         }
         .agency-contact-item {
           margin: 2px 0;
@@ -147,9 +156,10 @@ export const generateContractHTML = (
         .contract-title {
           font-size: 14px;
           font-weight: bold;
-          margin-top: 6px;
+          margin-top: 8px;
           border-top: 1px solid rgba(255,255,255,0.5);
           padding-top: 4px;
+          text-align: center;
         }
         
         /* CARD STYLES */
@@ -299,13 +309,17 @@ export const generateContractHTML = (
         
         <!-- HEADER -->
         <div class="header">
-          ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" class="header-logo">` : '<div style="font-size: 32px; margin-bottom: 8px;">🏢</div>'}
-          <div class="agency-name">${(agencySettings?.name || 'AGENCY').split(' ').slice(0, 3).join(' ')}</div>
-          <div class="agency-contact">
-            ${agencySettings?.address ? `<div class="agency-contact-item"><strong>${isFrench ? 'Adresse du siège' : 'عنوان المقر'}</strong><br>${agencySettings.address}</div>` : ''}
-            ${agencySettings?.phone ? `<div class="agency-contact-item">📞 ${isFrench ? 'Téléphone' : 'الهاتف'}: ${ltrPhone(agencySettings.phone)}</div>` : ''}
-            ${agencySettings?.phone_number_2 ? `<div class="agency-contact-item">📱 ${isFrench ? 'Deuxième numéro de téléphone' : 'الهاتف الثاني'}: ${ltrPhone(agencySettings.phone_number_2)}</div>` : ''}
-            ${agencySettings?.bank_number ? `<div class="agency-contact-item">🏦 ${isFrench ? 'Numéro de compte bancaire' : 'الرقم البنكي'}: ${agencySettings.bank_number}</div>` : ''}
+          <div class="header-top">
+            <div class="header-brand">
+              ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" class="header-logo">` : '<div style="font-size: 40px;">🏢</div>'}
+              <div class="agency-name">${(agencySettings?.name || 'AGENCY').split(' ').slice(0, 3).join(' ')}</div>
+            </div>
+            <div class="agency-contact">
+              ${agencySettings?.address ? `<div class="agency-contact-item"><strong>${isFrench ? 'Adresse du siège' : 'عنوان المقر'}</strong><br>${agencySettings.address}</div>` : ''}
+              ${agencySettings?.phone ? `<div class="agency-contact-item">📞 ${isFrench ? 'Téléphone' : 'الهاتف'}: ${ltrPhone(agencySettings.phone)}</div>` : ''}
+              ${agencySettings?.phone_number_2 ? `<div class="agency-contact-item">📱 ${isFrench ? 'Deuxième numéro de téléphone' : 'الهاتف الثاني'}: ${ltrPhone(agencySettings.phone_number_2)}</div>` : ''}
+              ${agencySettings?.bank_number ? `<div class="agency-contact-item">🏦 ${isFrench ? 'Numéro de compte bancaire' : 'الرقم البنكي'}: ${agencySettings.bank_number}</div>` : ''}
+            </div>
           </div>
           <div class="contract-title">${labels.contractTitle}</div>
         </div>

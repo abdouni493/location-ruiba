@@ -388,10 +388,20 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
                 console.log('✅ Successfully fetched worker full_name:', workerFullName);
               } else {
                 console.log('⚠️ Could not fetch worker:', workerError?.message);
-                // Don't fall back to user.name (which might be email)
               }
             } catch (err: any) {
               console.error('❌ Error fetching worker:', err);
+            }
+          }
+
+          // Fallback: if we couldn't resolve a worker row, use the logged-in
+          // user's display name (full_name / username). We skip it only when the
+          // display name is just the email, so we never store an email as creator.
+          if (!workerFullName) {
+            const displayName = (user?.name || '').trim();
+            if (displayName && displayName.toLowerCase() !== (user?.email || '').trim().toLowerCase()) {
+              workerFullName = displayName;
+              console.log('ℹ️ Falling back to logged-in user name as creator:', workerFullName);
             }
           }
           

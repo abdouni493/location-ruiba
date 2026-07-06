@@ -112,7 +112,9 @@ export const EquipePage: React.FC<EquipePageProps> = ({ lang }) => {
       setEditingWorker(null);
     } catch (err) {
       console.error('Error saving worker:', err);
-      throw new Error('Erreur lors de l\'enregistrement');
+      // Re-throw the ORIGINAL error so the modal can show a specific, useful
+      // message (email already used, session expired, …) instead of a generic one.
+      throw err;
     }
   };
 
