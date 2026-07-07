@@ -662,7 +662,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   <h2 className="text-2xl font-black uppercase tracking-tighter">👤 {{fr: 'Mon Profil', ar: 'ملفي الشخصي'}[lang]}</h2>
                 </div>
 
-                <form className="p-8 space-y-6">
+                <form className="p-8 space-y-6" onSubmit={(e) => e.preventDefault()}>
                   {/* Profile Photo */}
                   <div className="space-y-4">
                     <label className="label-saas">📸 {{fr: 'Photo de profil', ar: 'صورة الملف'}[lang]}</label>
@@ -728,7 +728,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   </h2>
                 </div>
 
-                <form className="p-8 space-y-6">
+                <form className="p-8 space-y-6" onSubmit={(e) => e.preventDefault()}>
                   {/* Username */}
                   <div className="space-y-2">
                     <label className="label-saas">👤 {{fr: 'Nom d\'utilisateur', ar: 'اسم المستخدم'}[lang]}</label>

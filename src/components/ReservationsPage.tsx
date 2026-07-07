@@ -620,6 +620,8 @@ export const ReservationsPage: React.FC<ReservationsPageProps> = ({ lang, isAuth
 };
 
 // ── ActionBtn helper ──────────────────────────────────────────────────────────
+// Bordered chip: icon always visible, label shown on wide screens. More visible
+// and professional than a bare icon, while staying compact inside the table row.
 const ActionBtn: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -629,8 +631,10 @@ const ActionBtn: React.FC<{
   <button
     onClick={onClick}
     title={label}
-    className={`p-1.5 rounded-lg transition-colors ${color}`}
+    aria-label={label}
+    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-saas-border bg-white text-[11px] font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-saas-primary-via/40 ${color}`}
   >
     {icon}
+    <span className="hidden xl:inline">{label}</span>
   </button>
 );

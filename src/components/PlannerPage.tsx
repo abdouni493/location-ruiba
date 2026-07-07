@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Language, ReservationDetails, Client, Car, VehicleInspection } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, X, Zap, Gauge, Heart } from 'lucide-react';
+import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, X, Zap, Gauge, Heart, RotateCcw, Phone } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
@@ -963,8 +963,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     <h3 className="font-black text-lg text-slate-900 truncate">
                       {reservation.client.firstName} {reservation.client.lastName}
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      📱 {reservation.client.phone}
+                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <span dir="ltr" className="truncate">{reservation.client.phone}</span>
                     </p>
                   </div>
                 </div>
@@ -1011,37 +1012,41 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 mb-3">
+              {/* Primary actions — clear hierarchy: view (filled) · edit (outline) · delete (ghost) */}
+              <div className="flex items-center gap-2 mb-2.5">
                 <button
                   onClick={() => handleViewDetails(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2.5 px-3 rounded-xl shadow-sm hover:shadow transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
-                  👁️ {lang === 'fr' ? 'Détails' : 'التفاصيل'}
+                  <Eye className="w-4 h-4" />
+                  {lang === 'fr' ? 'Détails' : 'التفاصيل'}
                 </button>
                 <button
                   onClick={() => handleEdit(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold py-2.5 px-3 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
                 >
-                  ✏️ {lang === 'fr' ? 'Modifier' : 'تعديل'}
+                  <Edit className="w-4 h-4" />
+                  {lang === 'fr' ? 'Modifier' : 'تعديل'}
                 </button>
                 <button
                   onClick={() => handleDelete(reservation)}
-                  className="flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  title={lang === 'fr' ? 'Supprimer' : 'حذف'}
+                  aria-label={lang === 'fr' ? 'Supprimer' : 'حذف'}
+                  className="inline-flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 p-2.5 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
                 >
-                  🗑️
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Special Actions Row */}
-              <div className="flex gap-2 items-center flex-wrap">
+              {/* Contextual actions — status transition · pay debt · print menu */}
+              <div className="flex items-stretch gap-2">
                 {/* Confirmed Status - Activate Button */}
                 {reservation.status === 'confirmed' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl shadow-sm hover:shadow transition-all text-sm"
                   >
-                    ✅ {lang === 'fr' ? 'Activer' : 'تفعيل'}
+                    <Zap className="w-4 h-4" /> {lang === 'fr' ? 'Activer' : 'تفعيل'}
                   </button>
                 )}
 
@@ -1049,29 +1054,19 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'active' && (
                   <button
                     onClick={() => handleComplete(reservation)}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2.5 px-3 rounded-xl shadow-sm hover:shadow transition-all text-sm"
                   >
-                    🏁 {lang === 'fr' ? 'Terminer' : 'إنهاء'}
+                    <CheckCircle className="w-4 h-4" /> {lang === 'fr' ? 'Terminer' : 'إنهاء'}
                   </button>
                 )}
 
-                {/* Completed Status - Convert to Active Button */}
-                {reservation.status === 'completed' && (
+                {/* Completed / Terminated Status - Reactivate Button */}
+                {(reservation.status === 'completed' || reservation.status === 'terminated') && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2.5 px-3 rounded-xl shadow-sm hover:shadow transition-all text-sm"
                   >
-                    🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
-                  </button>
-                )}
-
-                {/* Terminated Status - Convert to Active Button */}
-                {reservation.status === 'terminated' && (
-                  <button
-                    onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                  >
-                    🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
+                    <RotateCcw className="w-4 h-4" /> {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
                   </button>
                 )}
 
@@ -1079,14 +1074,14 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {remainingAmount > 0 && (
                   <button
                     onClick={() => setShowDebtModal({ reservation })}
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm flex items-center justify-center gap-2"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2.5 px-3 rounded-xl shadow-sm hover:shadow transition-all text-sm"
                   >
-                    💰 {lang === 'fr' ? 'Payer dette' : 'سداد الدين'}
+                    <DollarSign className="w-4 h-4" /> {lang === 'fr' ? 'Payer' : 'سداد'}
                   </button>
                 )}
 
                 {/* Print Menu Button */}
-                <div className="relative">
+                <div className="relative ml-auto">
                   <button
                     ref={(el: HTMLButtonElement | null) => { if (el) buttonRefs.current[reservation.id] = el; }}
                     onClick={() => {
@@ -1106,12 +1101,13 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       }
                       setOpenPrintMenu(openPrintMenu === reservation.id ? null : reservation.id);
                     }}
-                    className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-colors flex items-center gap-1"
-                    title={lang === 'fr' ? 'Plus d\'options' : 'خيارات أكثر'}
+                    className="h-full inline-flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 px-3 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
+                    title={lang === 'fr' ? "Imprimer / documents" : 'طباعة / مستندات'}
+                    aria-label={lang === 'fr' ? "Imprimer / documents" : 'طباعة / مستندات'}
                   >
-                    <MoreVertical className="w-4 h-4" />
+                    <Printer className="w-4 h-4" />
                   </button>
-                  
+
                   {/* Dropdown Menu */}
                   <AnimatePresence>
                     {openPrintMenu === reservation.id && (
@@ -1120,13 +1116,13 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 5 }}
                         transition={{ duration: 0.2 }}
-                        className={`absolute bottom-12 bg-white rounded-lg shadow-2xl border border-saas-border z-50 min-w-max overflow-hidden ${menuDirections[reservation.id] === 'left' ? 'right-0' : 'left-0'}` }
+                        className={`absolute bottom-12 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 min-w-[190px] overflow-hidden py-1 ${menuDirections[reservation.id] === 'left' ? 'right-0' : 'left-0'}` }
                       >
                         <button
                           onClick={() => handlePrint(reservation, 'contract')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
+                          className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-slate-700 font-semibold text-sm flex items-center gap-2.5 transition-colors"
                         >
-                          📄 {lang === 'fr' ? 'Contrat' : 'عقد'}
+                          <FileText className="w-4 h-4 text-indigo-500" /> {lang === 'fr' ? 'Contrat' : 'عقد'}
                         </button>
                         <button
                           onClick={() => {
@@ -1134,15 +1130,15 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                             setConditionsLanguage('ar');
                             setShowConditionsModal(true);
                           }}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
+                          className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-slate-700 font-semibold text-sm flex items-center gap-2.5 transition-colors"
                         >
-                          🖨️ {lang === 'fr' ? 'Conditions' : 'طباعة الشروط'}
+                          <Printer className="w-4 h-4 text-indigo-500" /> {lang === 'fr' ? 'Conditions' : 'طباعة الشروط'}
                         </button>
                         <button
                           onClick={() => handlePrint(reservation, 'invoice')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 transition-colors"
+                          className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-slate-700 font-semibold text-sm flex items-center gap-2.5 transition-colors"
                         >
-                          🧾 {lang === 'fr' ? 'Facture' : 'الفاتورة'}
+                          <CreditCard className="w-4 h-4 text-indigo-500" /> {lang === 'fr' ? 'Facture' : 'الفاتورة'}
                         </button>
                       </motion.div>
                     )}

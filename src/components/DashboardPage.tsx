@@ -290,6 +290,33 @@ const AlertCard: React.FC<AlertCardProps> = ({ alert, lang, onAlertClick }) => {
   );
 };
 
+/**
+ * Self-contained live clock. Kept as its OWN component so its once-a-minute
+ * tick re-renders only this small node — not the whole (heavy) dashboard, which
+ * previously re-rendered every single second because the clock state lived in
+ * DashboardPage. The display only goes down to the minute, so a 30s tick is
+ * more than enough.
+ */
+const LiveClock: React.FC<{ lang: Language }> = ({ lang }) => {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <>
+      {now.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}
+    </>
+  );
+};
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoading = false, user = null }) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
@@ -312,7 +339,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
   const [reservations, setReservations] = useState<ReservationDetails[]>([]);
   const [showOnlyReservationAlerts, setShowOnlyReservationAlerts] = useState(false);
   const [alertFilter, setAlertFilter] = useState<'all' | 'maintenance' | 'reservations'>('all');
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -397,11 +423,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
     };
 
     loadDashboardData();
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
   }, [user, isAuthLoading]);
 
   // Schedule notifications for reservations expiring tomorrow
@@ -1186,14 +1207,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
               className="text-blue-200 text-sm font-medium mt-3 flex items-center gap-2"
             >
               <span className="text-lg">🕐</span>
-              {currentTime.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+              <LiveClock lang={lang} />
             </motion.p>
           </div>
 

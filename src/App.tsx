@@ -34,6 +34,228 @@ if (typeof window !== 'undefined') {
   (window as any).__supabase__ = supabase;
 }
 
+// ── Mock fallback data (module scope so its identity is stable across renders) ──
+const mockCars: Car[] = [
+  {
+    id: '1', brand: 'Toyota', model: 'Prius', registration: 'AB-123-CD', year: 2021,
+    color: 'Blanc', vin: 'VIN123456', energy: 'Hybride', transmission: 'Automatique',
+    seats: 5, doors: 4, priceDay: 5000, priceWeek: 28000, priceMonth: 90000, deposit: 50000,
+    images: ['https://images.unsplash.com/photo-1560958089-b8a63dd8aa8b?w=500&h=400&fit=crop'], mileage: 45000,
+  },
+  {
+    id: '2', brand: 'Mercedes', model: 'E-Class', registration: 'AB-456-EF', year: 2022,
+    color: 'Noir', vin: 'VIN789012', energy: 'Essence', transmission: 'Automatique',
+    seats: 5, doors: 4, priceDay: 12000, priceWeek: 70000, priceMonth: 200000, deposit: 100000,
+    images: ['https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=500&h=400&fit=crop'], mileage: 23000,
+  },
+  {
+    id: '3', brand: 'BMW', model: 'X5', registration: 'AB-789-GH', year: 2023,
+    color: 'Gris', vin: 'VIN345678', energy: 'Essence', transmission: 'Automatique',
+    seats: 7, doors: 4, priceDay: 15000, priceWeek: 85000, priceMonth: 250000, deposit: 125000,
+    images: ['https://images.unsplash.com/photo-1605559424843-9e4c3ff86981?w=500&h=400&fit=crop'], mileage: 5000,
+  },
+];
+
+const mockAgencies: Agency[] = [
+  { id: '1', name: 'Luxdrive Alger Centre', address: 'Boulevard Didouche Mourad', city: 'Alger', createdAt: '2024-01-01T00:00:00.000Z' },
+  { id: '2', name: 'Luxdrive Oran', address: 'Boulevard Khémisti', city: 'Oran', createdAt: '2024-01-01T00:00:00.000Z' },
+  { id: '3', name: 'Luxdrive Annaba', address: 'Rue Larbi Ben Mhidi', city: 'Annaba', createdAt: '2024-01-01T00:00:00.000Z' },
+];
+
+const mockContactInfo = {
+  facebook: 'https://facebook.com/luxdrive', instagram: '@luxdrive_dz', tiktok: '@luxdrive',
+  whatsapp: '+213 5 1234 5678', phone: '+213 5 1234 5678', address: 'Alger, Algeria', email: 'contact@luxdrive.com',
+};
+
+const mockWebsiteSettings = {
+  name: 'Luxdrive Premium',
+  description: 'Votre partenaire de confiance en location de véhicules',
+  logo: 'https://images.unsplash.com/photo-1560958089-b8a63dd8aa8b?w=200&h=200&fit=crop',
+};
+
+// ── Shared props for the authenticated shell ───────────────────────────────────
+interface DashboardLayoutProps {
+  lang: Language;
+  setLang: (l: Language) => void;
+  user: User | null;
+  isAuthLoading: boolean;
+  cars: Car[];
+  websiteSettings: any;
+  activeTab: string;
+  onTabChange: (id: string) => void;
+  onLogout: () => void;
+  maintenanceAlertsCount: number;
+  isSidebarVisible: boolean;
+  setIsSidebarVisible: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+/**
+ * Authenticated shell (Sidebar + Navbar + active page).
+ * Hoisted to module scope so its component identity is STABLE across App
+ * re-renders. Previously it was declared inside App(), so every App state
+ * change (cars/website/alerts loads, the 5-min alert poll, navigation) gave it
+ * a new identity and React fully remounted the whole page tree — which made
+ * every screen refetch and flash its loader ("refreshing multiple times").
+ */
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+  lang, setLang, user, isAuthLoading, cars, websiteSettings, activeTab,
+  onTabChange, onLogout, maintenanceAlertsCount, isSidebarVisible, setIsSidebarVisible,
+}) => {
+  const activeItem = SIDEBAR_ITEMS.find(item => item.id === activeTab) || SIDEBAR_ITEMS[0];
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <DashboardPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'planner':
+        return <PlannerPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'car-gains':
+        return <CarGainsPage lang={lang} />;
+      case 'vehicles':
+        return <CarsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'maintenance':
+        return <MaintenancePage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'agencies':
+        return <AgenciesPage lang={lang} />;
+      case 'clients':
+        return <ClientsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'team':
+        return <EquipePage lang={lang} />;
+      case 'expenses':
+        return <ExpensesPage lang={lang} cars={cars} />;
+      case 'services':
+        return <ProtectionServicesPage lang={lang} />;
+      case 'reservations':
+        return <ReservationsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'reports':
+        return <ReportsPage lang={lang} />;
+      case 'config':
+        return user ? <ConfigPage lang={lang} user={user} /> : null;
+      default:
+        return (
+          <div className="space-y-8">
+            <div className="flex flex-col gap-2">
+              <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
+                {activeItem.icon} {activeItem.label[lang]}
+              </h2>
+              <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
+                {lang === 'fr'
+                  ? `Interface pour ${activeItem.label.fr}`
+                  : `واجهة لـ ${activeItem.label.ar}`}
+              </p>
+            </div>
+
+            <div className="glass-card p-12 min-h-[500px] flex items-center justify-center border-dashed border-saas-border bg-white group">
+              <div className="text-center space-y-6">
+                <div className="text-8xl opacity-10 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700 transform group-hover:scale-110">
+                  {activeItem.icon}
+                </div>
+                <div className="space-y-3">
+                  <p className="text-saas-text-main font-black text-2xl uppercase tracking-tighter">
+                    {lang === 'fr' ? 'Contenu en développement' : 'المحتوى قيد التطوير'}
+                  </p>
+                  <p className="text-saas-text-muted text-sm font-medium max-w-md mx-auto">
+                    {lang === 'fr'
+                      ? 'Cette section est en cours de modernisation pour correspondre à votre nouveau standard SaaS.'
+                      : 'هذا القسم قيد التحديث ليتناسب مع معايير SaaS الجديدة الخاصة بك.'}
+                  </p>
+                </div>
+                <button className="btn-saas-primary px-8 py-3">
+                  {lang === 'fr' ? 'En savoir plus' : 'معرفة المزيد'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className={`flex min-h-screen bg-saas-bg text-saas-text-main ${lang === 'ar' ? 'font-arabic' : ''}`}>
+      {!supabaseConfigured && (
+        <div className="fixed inset-0 bg-yellow-100 text-yellow-900 flex items-center justify-center z-50 p-4 text-center">
+          <strong>Warning:</strong> Supabase variables are missing. Set
+          <code className="mx-1">VITE_SUPABASE_URL</code> and
+          <code className="mx-1">VITE_SUPABASE_ANON_KEY</code> in your environment.
+        </div>
+      )}
+      <Sidebar
+        lang={lang}
+        isVisible={isSidebarVisible}
+        setIsVisible={setIsSidebarVisible}
+        onLogout={onLogout}
+        activeTab={activeTab}
+        setActiveTab={onTabChange}
+        alertsCount={maintenanceAlertsCount}
+        websiteSettings={websiteSettings}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Navbar
+          user={user}
+          lang={lang}
+          setLang={setLang}
+          toggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
+        />
+
+        <main className="flex-1 p-8 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isSidebarVisible && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarVisible(false)}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/**
+ * Gate for protected routes. Hoisted to module scope alongside DashboardLayout
+ * so React keeps the shell mounted across App re-renders instead of remounting.
+ */
+const ProtectedRoute: React.FC<DashboardLayoutProps> = (props) => {
+  if (props.isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-saas-bg">
+        <div className="text-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
+          />
+          <p className="text-saas-text-muted">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!props.user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <DashboardLayout {...props} />;
+};
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -220,107 +442,6 @@ export default function App() {
     loadAgencies();
   }, [isWebsiteMode]);
 
-  // Define mock data immediately (used as fallback)
-  const mockCars: Car[] = [
-    {
-      id: '1',
-      brand: 'Toyota',
-      model: 'Prius',
-      registration: 'AB-123-CD',
-      year: 2021,
-      color: 'Blanc',
-      vin: 'VIN123456',
-      energy: 'Hybride',
-      transmission: 'Automatique',
-      seats: 5,
-      doors: 4,
-      priceDay: 5000,
-      priceWeek: 28000,
-      priceMonth: 90000,
-      deposit: 50000,
-      images: ['https://images.unsplash.com/photo-1560958089-b8a63dd8aa8b?w=500&h=400&fit=crop'],
-      mileage: 45000,
-    },
-    {
-      id: '2',
-      brand: 'Mercedes',
-      model: 'E-Class',
-      registration: 'AB-456-EF',
-      year: 2022,
-      color: 'Noir',
-      vin: 'VIN789012',
-      energy: 'Essence',
-      transmission: 'Automatique',
-      seats: 5,
-      doors: 4,
-      priceDay: 12000,
-      priceWeek: 70000,
-      priceMonth: 200000,
-      deposit: 100000,
-      images: ['https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=500&h=400&fit=crop'],
-      mileage: 23000,
-    },
-    {
-      id: '3',
-      brand: 'BMW',
-      model: 'X5',
-      registration: 'AB-789-GH',
-      year: 2023,
-      color: 'Gris',
-      vin: 'VIN345678',
-      energy: 'Essence',
-      transmission: 'Automatique',
-      seats: 7,
-      doors: 4,
-      priceDay: 15000,
-      priceWeek: 85000,
-      priceMonth: 250000,
-      deposit: 125000,
-      images: ['https://images.unsplash.com/photo-1605559424843-9e4c3ff86981?w=500&h=400&fit=crop'],
-      mileage: 5000,
-    },
-  ];
-
-  const mockAgencies: Agency[] = [
-    {
-      id: '1',
-      name: 'Luxdrive Alger Centre',
-      address: 'Boulevard Didouche Mourad',
-      city: 'Alger',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      name: 'Luxdrive Oran',
-      address: 'Boulevard Khémisti',
-      city: 'Oran',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      name: 'Luxdrive Annaba',
-      address: 'Rue Larbi Ben Mhidi',
-      city: 'Annaba',
-      createdAt: new Date().toISOString(),
-    },
-  ];
-
-  const mockContactInfo = {
-    facebook: 'https://facebook.com/luxdrive',
-    instagram: '@luxdrive_dz',
-    tiktok: '@luxdrive',
-    whatsapp: '+213 5 1234 5678',
-    phone: '+213 5 1234 5678',
-    address: 'Alger, Algeria',
-    email: 'contact@luxdrive.com',
-  };
-
-  const mockWebsiteSettings = {
-    name: 'Luxdrive Premium',
-    description: 'Votre partenaire de confiance en location de véhicules',
-    logo: 'https://images.unsplash.com/photo-1560958089-b8a63dd8aa8b?w=200&h=200&fit=crop',
-  };
-
   const handleLogin = (userObj: User) => {
     console.log('[Auth] ======= LOGIN HANDLER STARTED =======');
     console.log('[Auth] User logged in:', { name: userObj.name, role: userObj.role, email: userObj.email });
@@ -416,190 +537,22 @@ export default function App() {
     navigate('/login');
   };
 
-  // Component for Dashboard Layout (with Sidebar and Navbar)
-  const DashboardLayout = () => {
-    // Ensure we're using the current activeTab from parent scope
-    const currentLocation = useLocation();
-    
-    // Sync URL path to activeTab when route changes
-    useEffect(() => {
-      const pathname = currentLocation.pathname;
-      const pathMap: Record<string, string> = {
-        '/dashboard': 'dashboard',
-        '/planificateur': 'planner',
-        '/gains-vehicule': 'car-gains',
-        '/vehicules': 'vehicles',
-        '/maintenance': 'maintenance',
-        '/clients': 'clients',
-        '/agences': 'agencies',
-        '/equipe': 'team',
-        '/depenses': 'expenses',
-        '/services': 'services',
-        '/reservations': 'reservations',
-        '/rapports': 'reports',
-        '/configuration': 'config',
-      };
-      const tabId = pathMap[pathname] || 'dashboard';
-      setActiveTab(tabId);
-    }, [currentLocation.pathname]);
-
-    const activeItem = SIDEBAR_ITEMS.find(item => item.id === activeTab) || SIDEBAR_ITEMS[0];
-
-    const renderContent = () => {
-      switch (activeTab) {
-        case 'dashboard':
-          return <DashboardPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'planner':
-          return <PlannerPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'car-gains':
-          return <CarGainsPage lang={lang} />;
-        case 'vehicles':
-          return <CarsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'maintenance':
-          return <MaintenancePage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'agencies':
-          return <AgenciesPage lang={lang} />;
-        case 'clients':
-          return <ClientsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'team':
-          return <EquipePage lang={lang} />;
-        case 'expenses':
-          return <ExpensesPage lang={lang} cars={cars} />;
-        case 'services':
-          return <ProtectionServicesPage lang={lang} />;
-        case 'reservations':
-          return <ReservationsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'reports':
-          return <ReportsPage lang={lang} />;
-        case 'config':
-          return user ? <ConfigPage lang={lang} user={user} /> : null;
-        default:
-          return (
-            <div className="space-y-8">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
-                  {activeItem.icon} {activeItem.label[lang]}
-                </h2>
-                <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
-                  {lang === 'fr' 
-                    ? `Interface pour ${activeItem.label.fr}` 
-                    : `واجهة لـ ${activeItem.label.ar}`}
-                </p>
-              </div>
-
-              <div className="glass-card p-12 min-h-[500px] flex items-center justify-center border-dashed border-saas-border bg-white group">
-                <div className="text-center space-y-6">
-                  <div className="text-8xl opacity-10 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700 transform group-hover:scale-110">
-                    {activeItem.icon}
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-saas-text-main font-black text-2xl uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Contenu en développement' : 'المحتوى قيد التطوير'}
-                    </p>
-                    <p className="text-saas-text-muted text-sm font-medium max-w-md mx-auto">
-                      {lang === 'fr' 
-                        ? 'Cette section est en cours de modernisation pour correspondre à votre nouveau standard SaaS.' 
-                        : 'هذا القسم قيد التحديث ليتناسب مع معايير SaaS الجديدة الخاصة بك.'}
-                    </p>
-                  </div>
-                  <button className="btn-saas-primary px-8 py-3">
-                    {lang === 'fr' ? 'En savoir plus' : 'معرفة المزيد'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-      }
-    };
-
-    return (
-      <div className={`flex min-h-screen bg-saas-bg text-saas-text-main ${lang === 'ar' ? 'font-arabic' : ''}`}>
-        {!supabaseConfigured && (
-          <div className="fixed inset-0 bg-yellow-100 text-yellow-900 flex items-center justify-center z-50 p-4 text-center">
-            <strong>Warning:</strong> Supabase variables are missing. Set
-            <code className="mx-1">VITE_SUPABASE_URL</code> and
-            <code className="mx-1">VITE_SUPABASE_ANON_KEY</code> in your environment.
-          </div>
-        )}
-        <Sidebar 
-          lang={lang} 
-          isVisible={isSidebarVisible} 
-          setIsVisible={setIsSidebarVisible}
-          onLogout={handleLogout}
-          activeTab={activeTab}
-          setActiveTab={handleTabChange}
-          alertsCount={maintenanceAlertsCount}
-        />
-        
-        <div className="flex-1 flex flex-col min-w-0">
-          <Navbar 
-            user={user} 
-            lang={lang} 
-            setLang={setLang} 
-            toggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)} 
-          />
-          
-          <main className="flex-1 p-8 overflow-y-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                {renderContent()}
-              </motion.div>
-            </AnimatePresence>
-          </main>
-        </div>
-
-        {/* Mobile Overlay */}
-        <AnimatePresence>
-          {isSidebarVisible && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarVisible(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
-            />
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
-
-  // Helper component for protected routes that handles loading state
-  const ProtectedRoute = () => {
-    console.log('[ProtectedRoute] Rendering - isAuthLoading:', isAuthLoading, 'user:', user?.name || 'null');
-    
-    // Show loading state while auth is initializing
-    if (isAuthLoading) {
-      console.log('[ProtectedRoute] Auth still loading, showing spinner');
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-saas-bg">
-          <div className="text-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
-            />
-            <p className="text-saas-text-muted">Chargement...</p>
-          </div>
-        </div>
-      );
-    }
-
-    // Redirect to login if not authenticated
-    if (!user) {
-      console.log('[ProtectedRoute] No user found, redirecting to login');
-      return <Navigate to="/login" replace />;
-    }
-
-    // User is authenticated, render dashboard
-    console.log('[ProtectedRoute] User authenticated, rendering dashboard');
-    return <DashboardLayout />;
+  // Props for the (module-scope) authenticated shell. Rebuilt each render, but
+  // ProtectedRoute/DashboardLayout are stable component types, so React
+  // reconciles them in place instead of remounting the whole page tree.
+  const layoutProps: DashboardLayoutProps = {
+    lang,
+    setLang,
+    user,
+    isAuthLoading,
+    cars,
+    websiteSettings,
+    activeTab,
+    onTabChange: handleTabChange,
+    onLogout: handleLogout,
+    maintenanceAlertsCount,
+    isSidebarVisible,
+    setIsSidebarVisible,
   };
 
   return (
@@ -639,20 +592,28 @@ export default function App() {
         )
       } />
 
-      {/* Dashboard and all interface routes - all protected */}
-      <Route path="/dashboard" element={<ProtectedRoute />} />
-      <Route path="/planificateur" element={<ProtectedRoute />} />
-      <Route path="/gains-vehicule" element={<ProtectedRoute />} />
-      <Route path="/vehicules" element={<ProtectedRoute />} />
-      <Route path="/maintenance" element={<ProtectedRoute />} />
-      <Route path="/clients" element={<ProtectedRoute />} />
-      <Route path="/agences" element={<ProtectedRoute />} />
-      <Route path="/equipe" element={<ProtectedRoute />} />
-      <Route path="/depenses" element={<ProtectedRoute />} />
-      <Route path="/services" element={<ProtectedRoute />} />
-      <Route path="/reservations" element={<ProtectedRoute />} />
-      <Route path="/rapports" element={<ProtectedRoute />} />
-      <Route path="/configuration" element={<ProtectedRoute />} />
+      {/* Dashboard and all interface routes - all protected.
+          A SINGLE layout route renders <ProtectedRoute>/<DashboardLayout> once;
+          the 13 child routes carry no element of their own (the active page is
+          chosen by activeTab inside DashboardLayout). Navigating between tabs
+          therefore keeps the whole shell mounted — the Sidebar, Navbar and the
+          current page are reconciled in place instead of being torn down and
+          refetched. This is what stops the "interface refreshes multiple times". */}
+      <Route element={<ProtectedRoute {...layoutProps} />}>
+        <Route path="/dashboard" element={null} />
+        <Route path="/planificateur" element={null} />
+        <Route path="/gains-vehicule" element={null} />
+        <Route path="/vehicules" element={null} />
+        <Route path="/maintenance" element={null} />
+        <Route path="/clients" element={null} />
+        <Route path="/agences" element={null} />
+        <Route path="/equipe" element={null} />
+        <Route path="/depenses" element={null} />
+        <Route path="/services" element={null} />
+        <Route path="/reservations" element={null} />
+        <Route path="/rapports" element={null} />
+        <Route path="/configuration" element={null} />
+      </Route>
 
       {/* Default redirect */}
       <Route path="/" element={

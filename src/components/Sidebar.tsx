@@ -13,10 +13,14 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   alertsCount?: number;
+  /** Agency branding, already fetched once at the App level. When provided the
+   *  Sidebar reads from it instead of firing its own duplicate query — which
+   *  previously re-ran on every remount and made the logo re-flash. */
+  websiteSettings?: { name?: string; logo?: string } | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  lang, isVisible, setIsVisible, onLogout, activeTab, setActiveTab, alertsCount = 0
+  lang, isVisible, setIsVisible, onLogout, activeTab, setActiveTab, alertsCount = 0, websiteSettings
 }) => {
   const isRtl = lang === 'ar';
   const [agencyData, setAgencyData] = useState({
@@ -24,27 +28,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
     logo: '',
   });
 
-  // Load agency data from database
+  // Prefer the branding already loaded by App. Only fall back to a one-off fetch
+  // when it wasn't provided, so we never duplicate the request or reload the logo.
   useEffect(() => {
+    if (websiteSettings) {
+      setAgencyData({
+        name: websiteSettings.name || 'AutoFutur',
+        logo: websiteSettings.logo || '',
+      });
+      return;
+    }
+
+    let cancelled = false;
     const loadAgencyData = async () => {
       try {
-        const websiteSettings = await DatabaseService.getWebsiteSettings();
+        const settings = await DatabaseService.getWebsiteSettings();
+        if (cancelled) return;
         setAgencyData({
-          name: websiteSettings.name || 'AutoFutur',
-          logo: websiteSettings.logo || '',
+          name: settings.name || 'AutoFutur',
+          logo: settings.logo || '',
         });
       } catch (error) {
         console.error('Error loading agency data:', error);
-        // Fallback to default values
-        setAgencyData({
-          name: 'AutoFutur',
-          logo: '',
-        });
+        if (!cancelled) setAgencyData({ name: 'AutoFutur', logo: '' });
       }
     };
 
     loadAgencyData();
-  }, []);
+    return () => { cancelled = true; };
+  }, [websiteSettings]);
 
   return (
     <AnimatePresence>
