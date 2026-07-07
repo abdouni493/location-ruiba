@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, UserIcon, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../supabase';
 import { Language, UserRole, User } from '../types';
 import { TRANSLATIONS } from '../constants';
@@ -13,10 +13,6 @@ interface LoginProps {
   onLogin: (user: User) => void;
 }
 
-interface AdminCount {
-  count: number;
-}
-
 interface AgencyBranding {
   logo: string;
   name: string;
@@ -26,10 +22,6 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
   const t = TRANSLATIONS[lang];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [isSigningUp, setIsSigningUp] = useState(false);
-  const [adminExists, setAdminExists] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -39,25 +31,6 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
   });
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      // if we stored a flag locally, skip the network request
-      if (localStorage.getItem('signupDone')) {
-        setAdminExists(true);
-      }
-      
-      try {
-        const { data, error } = await supabase
-          .from('admin_count')
-          .select('count')
-          .single();
-        if (data && (data as any).count > 0) {
-          setAdminExists(true);
-        }
-      } catch (err) {
-        console.warn('Error checking admin:', err);
-      }
-    };
-    
     const loadAgencyBranding = async () => {
       try {
         const settings = await DatabaseService.getWebsiteSettings();
@@ -71,153 +44,34 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
         console.warn('Error loading agency branding:', err);
       }
     };
-    
-    checkAdmin();
+
     loadAgencyBranding();
   }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const timestamp = new Date().toLocaleTimeString();
-    console.log(`\n[Login] ======= LOGIN/SIGNUP ATTEMPT STARTED at ${timestamp} =======`);
-    
+    console.log(`\n[Login] ======= LOGIN ATTEMPT STARTED at ${timestamp} =======`);
+
     // Prevent double submissions
     if (isSubmitting) {
       console.log('[Login] Form already submitting, ignoring duplicate submission');
       return;
     }
-    
+
     setErrorMessage('');
     setIsSubmitting(true);
 
     try {
-      // SIGNUP FLOW - Always use Supabase Auth
-      if (isSigningUp) {
-        console.log('[Login] === SIGNUP MODE ===');
-        console.log('[Login] Attempting Supabase signup...');
-
-        // Basic validation before hitting the network
-        if (!fullName.trim() || !username.trim() || !email.trim() || !password) {
-          setErrorMessage(lang === 'fr'
-            ? 'Veuillez remplir le nom complet, le nom d\'utilisateur, l\'email et le mot de passe.'
-            : 'يرجى إدخال الاسم الكامل واسم المستخدم والبريد الإلكتروني وكلمة المرور.');
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Create the admin ACCOUNT in Supabase Auth (auth.users). We pass the
-        // role/full_name/username in user metadata so the handle_new_user()
-        // trigger provisions the profile with role = 'admin'.
-        const { data: signData, error: signError } = await supabase.auth.signUp({
-          email: email.trim().toLowerCase(),
-          password,
-          options: {
-            data: {
-              username: username.trim(),
-              full_name: fullName.trim(),
-              role: 'admin',
-            },
-          },
-        });
-        if (signError) {
-          console.log('[Login] Signup error:', signError.message);
-          setErrorMessage(signError.message);
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Ensure the profile row exists AND carries the admin role + names.
-        // The trigger may have already created it, so we upsert (never rely on
-        // a plain insert that would conflict and silently leave role='worker').
-        if (signData?.user) {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert(
-              {
-                id: signData.user.id,
-                username: username.trim(),
-                full_name: fullName.trim(),
-                role: 'admin',
-              },
-              { onConflict: 'id' }
-            );
-          if (profileError) {
-            console.error('Profile upsert error:', profileError);
-          }
-        }
-
-        // remember that an admin now exists (used elsewhere); the create-admin
-        // button itself stays available so more admins can be added later
-        localStorage.setItem('signupDone', 'true');
-        setAdminExists(true);
-
-        // automatically sign in the user
-        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword(
-          { email: email.trim().toLowerCase(), password }
-        );
-        if (loginError) {
-          console.log('[Login] Auto-signin after signup error:', loginError.message);
-          // The account was created; if the project requires email confirmation
-          // the auto-login can fail. Tell the admin to log in manually instead
-          // of showing a raw error.
-          setErrorMessage(lang === 'fr'
-            ? 'Compte administrateur créé. Veuillez maintenant vous connecter avec votre email et mot de passe.'
-            : 'تم إنشاء حساب المسؤول. يرجى الآن تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.');
-          setIsSigningUp(false);
-          setPassword('');
-          setIsSubmitting(false);
-          return;
-        }
-        if (loginData.session) {
-          const u = loginData.user;
-          const role = (u.user_metadata?.role as UserRole) || 'admin';
-          const name = (u.user_metadata?.full_name as string) || (u.user_metadata?.username as string) || u.email || '';
-          
-          console.log('[Login] === SIGNUP SUCCESSFUL ===');
-          console.log('[Login] Signup user:', { name, email: u.email, role });
-          console.log('[Login] Session token length:', loginData.session.access_token.length);
-          console.log('[Login] localStorage after signup:', {
-            has_token: !!localStorage.getItem('supabase.auth.token'),
-            has_signup_done: !!localStorage.getItem('signupDone')
-          });
-          
-          // Save session
-          await sessionService.createSession(
-            loginData.session.access_token,
-            loginData.session.refresh_token,
-            loginData.session.expires_at || Math.floor(Date.now() / 1000) + 3600,
-            u.id,
-            u.email || '',
-            role,
-            name
-          );
-          
-          // CRITICAL: Clear all SDK session data to prevent auto-refresh
-          console.log('[Login] Clearing SDK session data to prevent auto-refresh...');
-          localStorage.removeItem('supabase.auth.token');
-          sessionStorage.clear();
-          
-          // Clear form
-          setEmail('');
-          setPassword('');
-          setUsername('');
-          setFullName('');
-
-          console.log('[Login] Calling onLogin callback...');
-          onLogin({ name, email: u.email || '', role, avatar: '' });
-        }
-        setIsSubmitting(false);
-        return;
-      }
-
       // LOGIN FLOW - Determine auth method based on input format
       const credential = email.trim();
       const isEmailInput = credential.includes('@');
 
       if (!credential || !password) {
         console.log('[Login] Missing credentials - email:', !!credential, 'password:', !!password);
-        setErrorMessage(lang === 'fr' 
-          ? 'Veuillez entrer vos identifiants.' 
+        setErrorMessage(lang === 'fr'
+          ? 'Veuillez entrer vos identifiants.'
           : 'الرجاء إدخال بيانات الدخول.');
         setIsSubmitting(false);
         return;
@@ -227,23 +81,23 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
       // Users must provide email and password to login
       console.log('[Login] === AUTHENTICATION ATTEMPT ===');
       console.log('[Login] Credentials provided - email format:', isEmailInput);
-      
+
       try {
         // For email input: try Supabase Auth first, then fall back to worker RPC
         if (isEmailInput) {
           console.log('[Login] Email authentication for:', credential);
-          
+
           // Try Supabase Auth first (for admin accounts)
           const result = await supabase.auth.signInWithPassword({
             email: credential,
             password
           });
-          
+
           if (result.error) {
             console.log('[Login] Supabase Auth failed:', result.error.message);
             // If Supabase Auth fails, try worker RPC login
             console.log('[Login] Trying worker login via RPC...');
-            
+
             const { data: loginResult, error: rpcError } = await supabase.rpc('login_worker', {
               p_email_or_username: credential,
               p_password: password
@@ -251,8 +105,8 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
 
             if (rpcError || !loginResult?.success) {
               console.log('[Login] Worker login also failed:', rpcError?.message || loginResult?.error);
-              setErrorMessage(lang === 'fr' 
-                ? 'Email ou mot de passe incorrect.' 
+              setErrorMessage(lang === 'fr'
+                ? 'Email ou mot de passe incorrect.'
                 : 'البريد الإلكتروني أو كلمة المرور غير صحيحة.');
               setIsSubmitting(false);
               return;
@@ -261,10 +115,10 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
             // Worker RPC login successful
             const worker = loginResult.worker;
             const workerRole = (worker.type as UserRole) || 'worker';
-            
+
             console.log('[Login] === WORKER LOGIN SUCCESSFUL ===');
             console.log('[Login] Worker authenticated:', { name: worker.full_name, email: worker.email, role: workerRole });
-            
+
             // Save worker session to database
             const sessionResult = await sessionService.createSession(
               `worker_token_${Date.now()}`,
@@ -275,14 +129,13 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
               workerRole,
               worker.full_name
             );
-            
+
             console.log('[Login] Session saved:', !!sessionResult);
-            
+
             // Clear form
             setEmail('');
             setPassword('');
-            setUsername('');
-            
+
             console.log('[Login] Calling onLogin callback...');
             onLogin({
               name: worker.full_name,
@@ -297,10 +150,10 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
             const u = result.data.user;
             const role = (u.user_metadata?.role as UserRole) || 'admin';
             const name = (u.user_metadata?.username as string) || u.user_metadata?.full_name || u.email || '';
-            
+
             console.log('[Login] === ADMIN LOGIN SUCCESSFUL ===');
             console.log('[Login] Admin authenticated:', { name, email: u.email, role });
-            
+
             // Save session to database using new session service
             console.log('[Login] Saving session to database...');
             await sessionService.createSession(
@@ -312,17 +165,16 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
               role,
               name
             );
-            
+
             // CRITICAL: Clear all SDK session data to prevent auto-refresh
             console.log('[Login] Clearing SDK session data to prevent auto-refresh...');
             localStorage.removeItem('supabase.auth.token');
             sessionStorage.clear();
-            
+
             // Clear form
             setEmail('');
             setPassword('');
-            setUsername('');
-            
+
             console.log('[Login] Calling onLogin callback...');
             onLogin({ name, email: u.email || '', role, avatar: '' });
             return;
@@ -330,16 +182,16 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
         } else {
           // For non-email input (username): show error message
           console.log('[Login] Username-based login no longer supported. Please use email.');
-          setErrorMessage(lang === 'fr' 
-            ? 'Veuillez utiliser votre email pour vous connecter.' 
+          setErrorMessage(lang === 'fr'
+            ? 'Veuillez utiliser votre email pour vous connecter.'
             : 'يرجى استخدام بريدك الإلكتروني للدخول.');
           setIsSubmitting(false);
           return;
         }
       } catch (error) {
         console.log('[Login] Authentication exception:', error);
-        setErrorMessage(lang === 'fr' 
-          ? 'Une erreur est survenue lors de la connexion.' 
+        setErrorMessage(lang === 'fr'
+          ? 'Une erreur est survenue lors de la connexion.'
           : 'حدث خطأ أثناء تسجيل الدخول.');
         setIsSubmitting(false);
         return;
@@ -347,8 +199,8 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
     } catch (error) {
       console.log('[Login] === UNEXPECTED ERROR ===');
       console.log('[Login] Error:', error);
-      setErrorMessage(lang === 'fr' 
-        ? 'Une erreur est survenue lors de la connexion.' 
+      setErrorMessage(lang === 'fr'
+        ? 'Une erreur est survenue lors de la connexion.'
         : 'حدث خطأ أثناء تسجيل الدخول.');
       setIsSubmitting(false);
     }
@@ -397,16 +249,16 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
       </div>
 
       {/* Main login card */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="w-full max-w-md relative z-10"
       >
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-10 space-y-10 border border-saas-border shadow-xl">
-          
+
           {/* Agency Logo & Name Section */}
-          <motion.div 
+          <motion.div
             className="text-center space-y-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -420,8 +272,8 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
                 transition={{ delay: 0.3, duration: 0.8, type: "spring", stiffness: 100 }}
                 className="flex justify-center mb-2"
               >
-                <img 
-                  src={agencyBranding.logo} 
+                <img
+                  src={agencyBranding.logo}
                   alt="Logo"
                   className="h-20 w-20 object-contain drop-shadow-lg rounded-xl border border-saas-border"
                 />
@@ -437,7 +289,7 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
               <h1 className="text-4xl font-black tracking-tight bg-linear-to-r from-saas-primary-start via-saas-primary-via to-saas-primary-end bg-clip-text text-transparent uppercase">
                 {agencyBranding.name.split(' ').slice(0, 3).join(' ')}
               </h1>
-              <motion.p 
+              <motion.p
                 className="text-saas-text-muted font-bold uppercase tracking-[0.3em] text-[11px] mt-3"
                 animate={{ opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 3, repeat: Infinity }}
@@ -448,83 +300,36 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
           </motion.div>
 
           {/* Form Section */}
-          <motion.form 
-            className="space-y-8" 
+          <motion.form
+            className="space-y-8"
             onSubmit={handleSubmit}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.8 }}
           >
             <div className="space-y-6">
-              {/* when signing up (admin account) we need full name + username */}
-              {isSigningUp && (
-                <motion.div
-                  className="space-y-2"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <label className="label-saas">{t.fullName}</label>
-                  <div className="relative group">
-                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-saas-text-muted group-focus-within:text-saas-primary-via transition-colors" size={18} />
-                    <input
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="input-saas pl-12"
-                      placeholder={lang === 'fr' ? 'Jean Dupont' : 'محمد أمين'}
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {isSigningUp && (
-                <motion.div
-                  className="space-y-2"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.05, duration: 0.5 }}
-                >
-                  <label className="label-saas">{t.username}</label>
-                  <div className="relative group">
-                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-saas-text-muted group-focus-within:text-saas-primary-via transition-colors" size={18} />
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="input-saas pl-12"
-                      placeholder={lang === 'fr' ? 'admin' : 'المسؤول'}
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Email/Username field */}
-              <motion.div 
+              {/* Email field */}
+              <motion.div
                 className="space-y-2"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1, duration: 0.5 }}
               >
-                <label className="label-saas">
-                  {isSigningUp 
-                    ? t.email 
-                    : (lang === 'fr' ? 'Email ou Nom d\'utilisateur' : 'البريد الإلكتروني أو اسم المستخدم')}
-                </label>
+                <label className="label-saas">{t.email}</label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-saas-text-muted group-focus-within:text-saas-primary-via transition-colors" size={18} />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="input-saas pl-12"
-                    placeholder={isSigningUp ? "admin@autofutur.com" : "john.doe ou john@email.com"}
+                    placeholder="john@email.com"
                   />
                 </div>
               </motion.div>
 
               {/* Password field */}
-              <motion.div 
+              <motion.div
                 className="space-y-2"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -533,8 +338,8 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
                 <label className="label-saas">{t.password}</label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-saas-text-muted group-focus-within:text-saas-primary-via transition-colors" size={18} />
-                  <input 
-                    type={showPassword ? "text" : "password"} 
+                  <input
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="input-saas pl-12 pr-12"
@@ -575,51 +380,13 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
                   animate={{ opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 >
-                  {isSigningUp ? t.signup : t.login}...
+                  {t.login}...
                 </motion.span>
               ) : (
-                isSigningUp ? t.signup : t.login
+                t.login
               )}
             </motion.button>
           </motion.form>
-
-          {/* Création du compte administrateur — toujours accessible pour que
-              l'agence puisse (re)créer un compte admin. Le compte est créé dans
-              Supabase Auth (auth.users) avec le rôle 'admin'. */}
-          {!isSigningUp && (
-            <motion.button
-              type="button"
-              onClick={() => { setIsSigningUp(true); setErrorMessage(''); }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.55, duration: 0.8 }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full flex flex-col items-center justify-center gap-1 py-3.5 rounded-xl font-bold text-sm bg-white border-2 border-saas-border text-saas-text-main hover:border-saas-primary-via hover:text-saas-primary-via transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <UserIcon size={17} />
-                {lang === 'fr' ? 'Créer un compte administrateur' : 'إنشاء حساب المسؤول'}
-              </span>
-              <span className="text-xs font-normal text-saas-text-muted">
-                {lang === 'fr' ? 'Nom complet, identifiant, email et mot de passe' : 'الاسم الكامل، اسم المستخدم، البريد وكلمة المرور'}
-              </span>
-            </motion.button>
-          )}
-
-          {/* En mode création : permettre de revenir à la connexion */}
-          {isSigningUp && (
-            <motion.button
-              type="button"
-              onClick={() => { setIsSigningUp(false); setErrorMessage(''); setFullName(''); setUsername(''); }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="w-full text-center text-sm font-semibold text-saas-primary-via hover:text-saas-primary-via/80 transition-colors"
-            >
-              {lang === 'fr' ? '← Retour à la connexion' : '→ العودة لتسجيل الدخول'}
-            </motion.button>
-          )}
 
           {/* Decorative line */}
           <motion.div

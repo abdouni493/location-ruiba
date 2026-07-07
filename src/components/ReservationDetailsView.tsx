@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Language, ReservationDetails, Payment, VehicleInspection, InspectionItem, Agency } from '../types';
+import { Language, ReservationDetails, Payment, VehicleInspection, Agency } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
 import { ReservationsService } from '../services/ReservationsService';
@@ -1145,14 +1145,10 @@ const SignaturePad: React.FC<{ lang: Language; onSignatureChange: (signature: st
 export const ActivationModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onActivate?: (reservation: ReservationDetails) => void }> = ({ lang, reservation, onClose, onActivate }) => {
   const [mileage, setMileage] = useState(reservation.departureInspection?.mileage?.toString() || '');
   const [location, setLocation] = useState(reservation.step1?.departureLocation || '');
-  const [fuelLevel, setFuelLevel] = useState<'full' | 'half' | 'quarter' | 'eighth' | 'empty'>('full');
   const [notes, setNotes] = useState('');
-  const [inspectionItems, setInspectionItems] = useState<InspectionItem[]>(
-    reservation.departureInspection?.inspectionItems || []
-  );
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [isLoadingAgencies, setIsLoadingAgencies] = useState(true);
-  
+
   // Load agencies on component mount
   useEffect(() => {
     const loadAgencies = async () => {
@@ -1171,28 +1167,6 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
     loadAgencies();
   }, []);
 
-
-  const fuelLevels = [
-    { value: 'full', label: 'PLEIN' },
-    { value: 'half', label: '1/2' },
-    { value: 'quarter', label: '1/4' },
-    { value: 'eighth', label: '1/8' },
-    { value: 'empty', label: 'VIDE' }
-  ];
-
-  const securityItems = inspectionItems.filter(i => i.category === 'security');
-  const equipmentItems = inspectionItems.filter(i => i.category === 'equipment');
-  const comfortItems = inspectionItems.filter(i => i.category === 'comfort' || i.category === 'cleanliness');
-
-  const handleInspectionItemToggle = (itemId: string) => {
-    setInspectionItems(prev =>
-      prev.map(item =>
-        item.id === itemId ? { ...item, checked: !item.checked } : item
-      )
-    );
-  };
-
-  
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1319,27 +1293,6 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
           </div>
 
           <div>
-            <label className="block font-bold text-saas-text-main mb-3">
-              ⛽ {lang === 'fr' ? 'Niveau de carburant' : 'مستوى الوقود'}
-            </label>
-            <div className="grid grid-cols-5 gap-2">
-              {fuelLevels.map((level) => (
-                <button
-                  key={level.value}
-                  onClick={() => setFuelLevel(level.value as any)}
-                  className={`p-3 border-2 rounded-lg font-bold transition-all ${
-                    fuelLevel === level.value
-                      ? 'border-saas-primary-start bg-saas-primary-start text-white shadow-lg'
-                      : 'border-slate-200 hover:border-saas-primary-start/50 hover:bg-saas-primary-start/10'
-                  }`}
-                >
-                  {level.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
             <label className="block font-bold text-saas-text-main mb-2">
               📝 {lang === 'fr' ? 'Notes rapides' : 'ملاحظات سريعة'}
             </label>
@@ -1350,74 +1303,6 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
               rows={3}
               placeholder={lang === 'fr' ? 'Ex: Petit éraflure sur portière droite' : 'مثال: خدش صغير على الباب الأيمن'}
             />
-          </div>
-
-          {/* INSPECTION ITEMS */}
-          <div className="bg-gradient-to-r from-saas-primary-start/10 to-saas-primary-end/10 rounded-xl p-6 border border-saas-primary-start/20">
-            <h4 className="text-lg font-black text-saas-text-main mb-4">
-              🔍 {lang === 'fr' ? 'Vérification du Véhicule' : 'فحص المركبة'}
-            </h4>
-            <div className="space-y-6">
-              {/* Security Items */}
-              <div>
-                <h5 className="font-bold text-saas-text-main mb-2">🛡️ {lang === 'fr' ? 'Sécurité' : 'الأمان'}</h5>
-                <div className="space-y-2">
-                  {securityItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        onChange={() => handleInspectionItemToggle(item.id)}
-                        className="w-5 h-5 text-saas-primary-start border-slate-300 rounded focus:ring-saas-primary-start"
-                      />
-                      <span className="font-bold capitalize text-saas-text-main">
-                        {item.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Equipment Items */}
-              <div>
-                <h5 className="font-bold text-saas-text-main mb-2">🔧 {lang === 'fr' ? 'Équipements' : 'المعدات'}</h5>
-                <div className="space-y-2">
-                  {equipmentItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        onChange={() => handleInspectionItemToggle(item.id)}
-                        className="w-5 h-5 text-saas-primary-start border-slate-300 rounded focus:ring-saas-primary-start"
-                      />
-                      <span className="font-bold capitalize text-saas-text-main">
-                        {item.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Comfort & Cleanliness Items */}
-              <div>
-                <h5 className="font-bold text-saas-text-main mb-2">✨ {lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة'}</h5>
-                <div className="space-y-2">
-                  {comfortItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        onChange={() => handleInspectionItemToggle(item.id)}
-                        className="w-5 h-5 text-saas-primary-start border-slate-300 rounded focus:ring-saas-primary-start"
-                      />
-                      <span className="font-bold capitalize text-saas-text-main">
-                        {item.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* ACTION BUTTONS */}
@@ -1431,23 +1316,24 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
           <button
             onClick={async () => {
               try {
+                // Inspection/fuel data is no longer collected at activation —
+                // pass neutral defaults so the service/DB layer stays unchanged.
                 await ReservationsService.activateReservationWithInspection({
                   reservationId: reservation.id,
                   carId: reservation.car.id,
                   mileage: parseInt(mileage),
-                  fuelLevel: fuelLevel as 'full' | 'half' | 'quarter' | 'eighth' | 'empty',
+                  fuelLevel: 'full',
                   location,
                   notes,
-                  inspectionItems,
+                  inspectionItems: [],
                   departureAgencyId: reservation.step1?.departureAgency
                 });
 
-                // Update car mileage and fuel level only (no status changes for period-based availability)
+                // Update car mileage (needed for maintenance/vidange alerts)
                 await supabase
                   .from('cars')
-                  .update({ 
-                    mileage: parseInt(mileage),
-                    fuel_level: fuelLevel
+                  .update({
+                    mileage: parseInt(mileage)
                   })
                   .eq('id', reservation.car.id);
 
@@ -1461,13 +1347,13 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
                     reservationId: reservation.id,
                     type: 'departure' as const,
                     mileage: parseInt(mileage),
-                    fuelLevel: fuelLevel as 'full' | 'half' | 'quarter' | 'eighth' | 'empty',
+                    fuelLevel: 'full' as const,
                     location,
                     date: new Date().toLocaleDateString(),
                     time: new Date().toLocaleTimeString(),
                     interiorPhotos: [],
                     exteriorPhotos: [],
-                    inspectionItems,
+                    inspectionItems: [],
                     notes,
                     createdAt: new Date().toISOString()
                   }
@@ -1493,15 +1379,10 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
 
 export const CompletionModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onComplete?: (reservation: ReservationDetails) => void }> = ({ lang, reservation, onClose, onComplete }) => {
   const [returnMileage, setReturnMileage] = useState('');
-  const [returnFuelLevel, setReturnFuelLevel] = useState<'full' | 'half' | 'quarter' | 'eighth' | 'empty'>('full');
   const [returnDate, setReturnDate] = useState(reservation.step1.returnDate);
   const [returnTime, setReturnTime] = useState(reservation.step1.returnTime);
   const [excessMileage, setExcessMileage] = useState('');
-  const [missingFuel, setMissingFuel] = useState('');
   const [documentsRecovered, setDocumentsRecovered] = useState(true);
-  const [returnInspectionItems, setReturnInspectionItems] = useState<InspectionItem[]>(
-    reservation.departureInspection?.inspectionItems.map(item => ({ ...item })) || []
-  );
   const [signature, setSignature] = useState('');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1511,27 +1392,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
     ? parseInt(returnMileage) - reservation.departureInspection.mileage
     : 0;
 
-  const fuelLevels = [
-    { value: 'full', label: 'PLEIN' },
-    { value: 'half', label: '1/2' },
-    { value: 'quarter', label: '1/4' },
-    { value: 'eighth', label: '1/8' },
-    { value: 'empty', label: 'VIDE' }
-  ];
-
-  const totalFees = (parseFloat(excessMileage) || 0) + (parseFloat(missingFuel) || 0);
-
-  const securityItems = returnInspectionItems.filter(i => i.category === 'security');
-  const equipmentItems = returnInspectionItems.filter(i => i.category === 'equipment');
-  const comfortItems = returnInspectionItems.filter(i => i.category === 'comfort' || i.category === 'cleanliness');
-
-  const handleInspectionItemToggle = (itemId: string, checked?: boolean) => {
-    setReturnInspectionItems(prev =>
-      prev.map(item =>
-        item.id === itemId ? { ...item, checked: checked !== undefined ? checked : !item.checked } : item
-      )
-    );
-  };
+  const totalFees = parseFloat(excessMileage) || 0;
 
   const handleComplete = async () => {
     try {
@@ -1555,28 +1416,29 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
 
       console.log('🟢 Starting reservation completion for:', reservation.id);
 
+      // Fuel level and inspection checklist are no longer collected at
+      // completion — pass neutral defaults so the service/DB layer stays unchanged.
       await ReservationsService.completeReservationWithInspection({
         reservationId: reservation.id,
         carId: reservation.carId,
         returnMileage: parseInt(returnMileage),
-        returnFuelLevel: returnFuelLevel,
+        returnFuelLevel: 'full',
         returnLocation: reservation.step1.returnAgency || reservation.step1.departureAgency,
         returnAgencyId: reservation.step1.returnAgency || reservation.step1.departureAgency,
         excessMileage: parseFloat(excessMileage) || 0,
-        missingFuel: parseFloat(missingFuel) || 0,
+        missingFuel: 0,
         signatureDataUrl: signature,
         notes: notes,
-        inspectionItems: returnInspectionItems,
+        inspectionItems: [],
       });
 
       console.log('🟢 Reservation completion successful, updating car info...');
 
-      // Update car mileage and fuel level
+      // Update car mileage (needed for maintenance/vidange alerts)
       const { error: carError } = await supabase
         .from('cars')
-        .update({ 
-          mileage: parseInt(returnMileage),
-          fuel_level: returnFuelLevel
+        .update({
+          mileage: parseInt(returnMileage)
         })
         .eq('id', reservation.car.id);
 
@@ -1597,19 +1459,19 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
           reservationId: reservation.id,
           type: 'return' as const,
           mileage: parseInt(returnMileage),
-          fuelLevel: returnFuelLevel,
+          fuelLevel: 'full' as const,
           location: reservation.step1.returnAgency || reservation.step1.departureAgency,
           date: returnDate,
           time: returnTime,
           interiorPhotos: [],
           exteriorPhotos: [],
-          inspectionItems: returnInspectionItems,
+          inspectionItems: [],
           notes: notes,
           signature: signature,
           createdAt: new Date().toISOString()
         },
         excessMileage: parseFloat(excessMileage) || 0,
-        missingFuel: parseFloat(missingFuel) || 0,
+        missingFuel: 0,
         additionalFees: totalFees,
         notes: notes
       };
@@ -1734,45 +1596,6 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
             </div>
           </div>
 
-          {/* Fuel Level */}
-          <div className="bg-green-50 rounded-2xl p-6 border border-green-200">
-            <h4 className="text-lg font-black text-green-900 mb-4">
-              ⛽ {lang === 'fr' ? 'Niveau Carburant' : 'مستوى الوقود'}
-            </h4>
-            <div className="space-y-4">
-              <div>
-                <p className="font-bold text-green-900">
-                  {lang === 'fr' ? 'Départ' : 'المغادرة'}: {
-                    reservation.departureInspection?.fuelLevel === 'full' ? 'PLEIN' :
-                    reservation.departureInspection?.fuelLevel === 'half' ? '1/2' :
-                    reservation.departureInspection?.fuelLevel === 'quarter' ? '1/4' :
-                    reservation.departureInspection?.fuelLevel === 'eighth' ? '1/8' : 'VIDE'
-                  }
-                </p>
-              </div>
-              <div>
-                <label className="block font-bold text-green-900 mb-3">
-                  {lang === 'fr' ? 'Niveau de retour' : 'مستوى العودة'}
-                </label>
-                <div className="grid grid-cols-5 gap-2">
-                  {fuelLevels.map((level) => (
-                    <button
-                      key={level.value}
-                      onClick={() => setReturnFuelLevel(level.value as any)}
-                      className={`p-3 border-2 rounded-lg font-bold transition-all ${
-                        returnFuelLevel === level.value
-                          ? 'border-green-600 bg-green-600 text-white shadow-lg'
-                          : 'border-green-200 hover:border-green-400 hover:bg-green-50'
-                      }`}
-                    >
-                      {level.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Dates and Times */}
           <div className="bg-purple-50 rounded-2xl p-6 border border-purple-200">
             <h4 className="text-lg font-black text-purple-900 mb-4">
@@ -1814,33 +1637,18 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
               💸 {lang === 'fr' ? 'Frais Supplémentaires de Clôture' : 'رسوم الإغلاق الإضافية'}
             </h4>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-red-900 mb-2">
-                    {lang === 'fr' ? 'Kilométrage Excédentaire' : 'عداد الكيلومترات الزائد'}
-                  </label>
-                  <p className="text-sm text-red-700 mb-1">{lang === 'fr' ? 'Facturé si dépassement forfait' : 'يتم احتسابه عند تجاوز الحد المسموح'}</p>
-                  <input
-                    type="number"
-                    value={excessMileage}
-                    onChange={(e) => setExcessMileage(e.target.value)}
-                    className="w-full p-3 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-red-900 mb-2">
-                    {lang === 'fr' ? 'Carburant Manquant' : 'الوقود المفقود'}
-                  </label>
-                  <p className="text-sm text-red-700 mb-1">{lang === 'fr' ? 'Différence par rapport au check-in' : 'الفرق مقارنة بالدخول'}</p>
-                  <input
-                    type="number"
-                    value={missingFuel}
-                    onChange={(e) => setMissingFuel(e.target.value)}
-                    className="w-full p-3 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    placeholder="0"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-red-900 mb-2">
+                  {lang === 'fr' ? 'Kilométrage Excédentaire' : 'عداد الكيلومترات الزائد'}
+                </label>
+                <p className="text-sm text-red-700 mb-1">{lang === 'fr' ? 'Facturé si dépassement forfait' : 'يتم احتسابه عند تجاوز الحد المسموح'}</p>
+                <input
+                  type="number"
+                  value={excessMileage}
+                  onChange={(e) => setExcessMileage(e.target.value)}
+                  className="w-full p-3 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  placeholder="0"
+                />
               </div>
               <div className="bg-red-100 rounded-lg p-4">
                 <p className="font-bold text-red-900">
@@ -1884,98 +1692,6 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
                     {lang === 'fr' ? 'Notifier client (non récupéré)' : 'إشعار العميل (غير مستلم)'}
                   </span>
                 </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Return Inspection */}
-          <div className="bg-orange-50 rounded-2xl p-6 border border-orange-200">
-            <h4 className="text-lg font-black text-orange-900 mb-4">
-              🔄 {lang === 'fr' ? 'Vérification Retour (État de Retour)' : 'التحقق من العودة (حالة العودة)'}
-            </h4>
-            <div className="space-y-6">
-              {/* Security Items */}
-              <div>
-                <h5 className="font-bold text-orange-900 mb-2">🛡️ {lang === 'fr' ? 'Sécurité' : 'الأمان'}</h5>
-                <div className="space-y-2">
-                  {securityItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Equipment Items */}
-              <div>
-                <h5 className="font-bold text-orange-900 mb-2">🔧 {lang === 'fr' ? 'Équipements' : 'المعدات'}</h5>
-                <div className="space-y-2">
-                  {equipmentItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Comfort & Cleanliness Items */}
-              <div>
-                <h5 className="font-bold text-orange-900 mb-2">✨ {lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة'}</h5>
-                <div className="space-y-2">
-                  {comfortItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>

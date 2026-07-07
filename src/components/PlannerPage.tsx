@@ -8,7 +8,6 @@ import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
-import { SendContractModal } from './SendContractModal';
 import { ClientModal } from './ClientModal';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -45,16 +44,18 @@ const printHTMLContent = (content: string, onDone?: () => void) => {
   printWindow.document.write(content);
   printWindow.document.close();
   const images = Array.from(printWindow.document.images);
-  const allLoaded = Promise.all(
-    images.map(img =>
+  const allLoaded = Promise.all([
+    ...images.map(img =>
       img.complete
         ? Promise.resolve()
         : new Promise<void>(resolve => {
             img.addEventListener('load', () => resolve());
             img.addEventListener('error', () => resolve());
           })
-    )
-  );
+    ),
+    // Wait for web fonts (templates load Google Fonts) so print output uses them
+    (printWindow.document as any).fonts?.ready ?? Promise.resolve()
+  ]);
   Promise.race([allLoaded, new Promise<void>(resolve => setTimeout(resolve, 3000))]).then(() => {
     printWindow.focus();
     printWindow.print();
@@ -89,10 +90,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const buttonRefs = useRef<{[id: string]: HTMLButtonElement | null}>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<ReservationDetails | null>(null);
   const [openPrintMenu, setOpenPrintMenu] = useState<string | null>(null);
-  const [showPrintModal, setShowPrintModal] = useState<{reservation: ReservationDetails, type: string} | null>(null);
   const [showPersonalization, setShowPersonalization] = useState<{reservation: ReservationDetails, type: string} | null>(null);
-  const [showSendContractModal, setShowSendContractModal] = useState<ReservationDetails | null>(null);
-  const [showInspectionMode, setShowInspectionMode] = useState(false);
   const [showConditionsModal, setShowConditionsModal] = useState(false);
   const [conditionsLanguage, setConditionsLanguage] = useState<'ar' | 'fr'>('ar');
   const [showDebtModal, setShowDebtModal] = useState<{ reservation: ReservationDetails } | null>(null);
@@ -332,13 +330,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   const handlePrint = (reservation: ReservationDetails, type: 'quote' | 'contract' | 'invoice' | 'payment' | 'engagement' | 'versement' | 'inspection') => {
     setOpenPrintMenu(null);
-    if (type === 'contract') {
-      // Contract offers two prints (contract + conditions), so show the small choice modal
-      setShowPrintModal({ reservation, type });
-    } else {
-      // All other documents open the print view (same template) directly
-      setShowPersonalization({ reservation, type });
-    }
+    setShowPersonalization({ reservation, type });
   };
 
   const generatePrintContent = (reservation: ReservationDetails, type: string) => {
@@ -452,11 +444,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const filteredReservations = reservations.filter(reservation => {
     if (!reservation.client || !reservation.car) return false;
 
-    const isTerminated =
-      reservation.status === 'completed' || reservation.status === 'terminated';
-
-    if (isTerminated && !isSearching) return false;
-
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       !isSearching ||
@@ -478,11 +465,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     return matchesSearch && matchesFilter && matchesDebt;
   });
 
-      const terminatedCount = isSearching
-    ? filteredReservations.filter(r => r.status === 'completed' || r.status === 'terminated').length
-    : 0;
-
-
   if (currentView === 'create' || currentView === 'create-alt') {
     return (
       <CreateReservationForm
@@ -492,7 +474,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         altFlow={currentView === 'create-alt'}
         onBack={async () => {
           setCurrentView('list');
-          setShowInspectionMode(false);
           setSelectedReservation(null);
           // Reload reservations after creating a new one
           try {
@@ -502,8 +483,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             console.error('Error reloading reservations:', err);
           }
         }}
-        inspectionMode={showInspectionMode}
-        initialData={showInspectionMode && selectedReservation ? selectedReservation : undefined}
       />
     );
   }
@@ -599,6 +578,8 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             <option value="accepted">{lang === 'fr' ? 'Accepté' : 'مقبول'}</option>
             <option value="confirmed">{lang === 'fr' ? 'Confirmé' : 'مؤكد'}</option>
             <option value="active">{lang === 'fr' ? 'Actif' : 'نشط'}</option>
+            <option value="completed">{lang === 'fr' ? 'Terminé' : 'منتهي'}</option>
+            <option value="terminated">{lang === 'fr' ? 'Clôturé' : 'مغلق'}</option>
             <option value="cancelled">{lang === 'fr' ? 'Annulé' : 'ملغي'}</option>
           </select>
 
@@ -640,37 +621,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         </button>
       </div>
 
-            {/* Banner showing terminated results when searching */}
-      <AnimatePresence>
-        {isSearching && terminatedCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-5 py-3"
-          >
-            <span className="text-purple-600 text-lg">🔍</span>
-            <p className="text-purple-800 text-sm font-semibold">
-              {lang === 'fr'
-                ? `${terminatedCount} réservation${terminatedCount > 1 ? 's' : ''} terminée${terminatedCount > 1 ? 's' : ''} incluse${terminatedCount > 1 ? 's' : ''} dans les résultats`
-                : `${terminatedCount} حجز منتهية مضمنة في النتائج`}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Hint when not searching */}
-      {!isSearching && (
-        <p className="text-xs text-slate-400 font-medium -mt-4">
-          {lang === 'fr'
-            ? '💡 Recherchez un nom, véhicule ou téléphone pour afficher aussi les réservations terminées'
-            : '💡 ابحث باسم أو سيارة أو هاتف لعرض الحجوزات المنتهية أيضًا'}
-        </p>
-      )}
-
-
-
-      
       {/* Car Availability Filter */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -934,23 +884,43 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             : (Number(reservation.advancePayment) || 0);
           const remainingAmount = Math.max(0, displayTotalPrice - paidAmount);
 
+          // Per-status accent used on the card border + top strip so the state
+          // is readable at a glance; hues match the status pills used app-wide.
+          const statusAccent =
+            reservation.status === 'confirmed' ? 'border-l-green-500' :
+            reservation.status === 'accepted' ? 'border-l-teal-500' :
+            reservation.status === 'active' ? 'border-l-blue-500' :
+            reservation.status === 'completed' ? 'border-l-purple-500' :
+            reservation.status === 'terminated' ? 'border-l-red-500' :
+            reservation.status === 'cancelled' ? 'border-l-slate-400' :
+            'border-l-yellow-400';
+
           return (
           <motion.div
             key={reservation.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col relative"
+            className={`bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow border border-slate-200 border-l-4 ${statusAccent} flex flex-col relative`}
           >
             {/* Car Image */}
-            <div className="relative h-48 overflow-hidden rounded-t-2xl">
+            <div className="relative h-40 overflow-hidden rounded-t-2xl">
               <img
                 src={reservation.car.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
                 alt={`${reservation.car.brand} ${reservation.car.model}`}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
+              {/* Bottom scrim with car identity — most scanned info, biggest weight */}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pt-8 pb-2.5">
+                <p className="text-white font-black text-base leading-tight drop-shadow">
+                  {reservation.car.brand} {reservation.car.model}
+                </p>
+                <p className="text-white/90 text-xs font-mono font-bold tracking-wider">
+                  {reservation.car.registration}
+                </p>
+              </div>
               {/* Client Avatar - Circular with Border */}
-              <div className="absolute top-4 right-4 w-16 h-16 rounded-full border-4 border-white overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
+              <div className="absolute top-3 right-3 w-12 h-12 rounded-full border-2 border-white overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
                 {reservation.client.profilePhoto ? (
                   <img
                     src={reservation.client.profilePhoto}
@@ -959,81 +929,85 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <span className="text-2xl">👤</span>
+                  <span className="text-xl">👤</span>
                 )}
               </div>
               {/* Status Badge */}
-              <div className="absolute top-4 left-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+              <div className="absolute top-3 left-3">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
                   reservation.status === 'confirmed' ? 'bg-green-100 text-green-800' :
                   reservation.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
                   reservation.status === 'active' ? 'bg-blue-100 text-blue-800' :
                   reservation.status === 'completed' ? 'bg-purple-100 text-purple-800' :
                   reservation.status === 'terminated' ? 'bg-red-100 text-red-800' :
+                  reservation.status === 'cancelled' ? 'bg-slate-200 text-slate-700' :
                   'bg-yellow-100 text-yellow-800'
                 }`}>
                   {reservation.status === 'confirmed' ? '✅ Confirmé' :
                    reservation.status === 'accepted' ? '✅ Accepté' :
                    reservation.status === 'active' ? '🔄 Actif' :
                    reservation.status === 'completed' ? '🏁 Terminé' :
-                   reservation.status === 'terminated' ? '🛑 Terminée' :
+                   reservation.status === 'terminated' ? '🛑 Clôturé' :
+                   reservation.status === 'cancelled' ? '❌ Annulé' :
                    '⏳ En attente'}
                 </span>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6">
-              {/* Client & Car Info */}
-              <div className="space-y-3 mb-4">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900">
-                    {reservation.client.firstName} {reservation.client.lastName}
-                  </h3>
-                  <p className="text-sm text-slate-600">
-                    📱 {reservation.client.phone}
-                  </p>
+            <div className="p-5 flex flex-col flex-1">
+              {/* Client & rental info */}
+              <div className="space-y-3 mb-4 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-black text-lg text-slate-900 truncate">
+                      {reservation.client.firstName} {reservation.client.lastName}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      📱 {reservation.client.phone}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-900">
-                    🚗 {reservation.car.brand} {reservation.car.model}
-                  </h4>
-                  <p className="text-sm text-slate-600">
-                    🏷️ {reservation.car.registration}
-                  </p>
+
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                  <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="truncate">{reservation.step1.departureDate} → {reservation.step1.returnDate}</span>
+                  <span className="ml-auto flex items-center gap-1 text-xs text-slate-500 flex-shrink-0">
+                    <Clock className="w-3.5 h-3.5" />
+                    {reservation.totalDays} {lang === 'fr' ? 'j' : 'يوم'}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Calendar className="w-4 h-4" />
-                  <span>{reservation.step1.departureDate} → {reservation.step1.returnDate}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Clock className="w-4 h-4" />
-                  <span>{reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}</span>
-                </div>
-                <div className="mt-3 p-4 bg-gradient-to-r from-white to-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
+
+                {/* Payment summary — remaining balance is the operational figure */}
+                <div className={`p-4 rounded-xl border ${remainingAmount === 0 ? 'bg-green-50/60 border-green-200' : 'bg-orange-50/60 border-orange-200'}`}>
+                  <div className="flex items-end justify-between mb-2">
                     <div>
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
-                      <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</div>
+                      <div className={`text-2xl font-black leading-tight ${remainingAmount === 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {remainingAmount === 0
+                          ? (lang === 'fr' ? 'Soldé ✓' : 'مسدد ✓')
+                          : `${remainingAmount.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}`}
+                      </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
-                      <div className="text-lg font-bold text-green-700">{paidAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                      <div className="text-xs text-slate-400">{`(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} ${lang === 'fr' ? 'services' : 'خدمات'})`}</div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{lang === 'fr' ? 'Total' : 'الإجمالي'}</div>
+                      <div className="text-sm font-bold text-slate-700">{displayTotalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
+                      <div className="text-[11px] font-semibold text-green-700">{lang === 'fr' ? 'Payé' : 'مدفوع'}: {paidAmount.toLocaleString()}</div>
                     </div>
                   </div>
 
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
+                  <div className="w-full bg-white rounded-full h-1.5 overflow-hidden border border-slate-100">
                     <div
-                      className={`h-2 rounded-full ${remainingAmount === 0 ? 'bg-green-500' : 'bg-orange-400'}`}
+                      className={`h-full rounded-full ${remainingAmount === 0 ? 'bg-green-500' : 'bg-orange-400'}`}
                       style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="text-slate-600">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</div>
-                    <div className={`font-bold ${remainingAmount === 0 ? 'text-green-700' : 'text-red-700'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                  </div>
+                  {servicesTotal > 0 && (
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      {lang === 'fr' ? 'dont services' : 'منها خدمات'}: {servicesTotal.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1061,36 +1035,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
               {/* Special Actions Row */}
               <div className="flex gap-2 items-center flex-wrap">
-                {/* Pending Status - Start Inspection */}
-                {reservation.status === 'pending' && (
-                  <button
-                    onClick={() => {
-                      // Open inspection mode for pending reservation
-                      setSelectedReservation(reservation);
-                      setShowInspectionMode(true);
-                      setCurrentView('create');
-                    }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                  >
-                    📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
-                  </button>
-                )}
-
-                {/* Accepted Status - Start Inspection (same as pending) */}
-                {reservation.status === 'accepted' && (
-                  <button
-                    onClick={() => {
-                      // Open inspection mode for accepted reservation in edit mode
-                      setSelectedReservation({ ...reservation });
-                      setShowInspectionMode(true);
-                      setCurrentView('edit');
-                    }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                  >
-                    📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
-                  </button>
-                )}
-
                 {/* Confirmed Status - Activate Button */}
                 {reservation.status === 'confirmed' && (
                   <button
@@ -1179,49 +1123,26 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                         className={`absolute bottom-12 bg-white rounded-lg shadow-2xl border border-saas-border z-50 min-w-max overflow-hidden ${menuDirections[reservation.id] === 'left' ? 'right-0' : 'left-0'}` }
                       >
                         <button
-                          onClick={() => handlePrint(reservation, 'quote')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
-                        >
-                          📋 {lang === 'fr' ? 'Devis' : 'عرض أسعار'}
-                        </button>
-                        <button
                           onClick={() => handlePrint(reservation, 'contract')}
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
                         >
                           📄 {lang === 'fr' ? 'Contrat' : 'عقد'}
                         </button>
                         <button
-                          onClick={() => handlePrint(reservation, 'invoice')}
+                          onClick={() => {
+                            setOpenPrintMenu(null);
+                            setConditionsLanguage('ar');
+                            setShowConditionsModal(true);
+                          }}
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
+                        >
+                          🖨️ {lang === 'fr' ? 'Conditions' : 'طباعة الشروط'}
+                        </button>
+                        <button
+                          onClick={() => handlePrint(reservation, 'invoice')}
+                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 transition-colors"
                         >
                           🧾 {lang === 'fr' ? 'Facture' : 'الفاتورة'}
-                        </button>
-                        <button
-                          onClick={() => handlePrint(reservation, 'versement')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
-                        >
-                          💳 {lang === 'fr' ? 'Reçu' : 'إيصال'}
-                        </button>
-                        <button
-                          onClick={() => handlePrint(reservation, 'engagement')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
-                        >
-                          🤝 {lang === 'fr' ? 'Engagement' : 'التزام'}
-                        </button>
-                        <button
-                          onClick={() => handlePrint(reservation, 'inspection')}
-                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
-                        >
-                          🔍 {lang === 'fr' ? 'Inspection' : 'فحص المركبة'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowSendContractModal(reservation);
-                            setOpenPrintMenu(null);
-                          }}
-                          className="w-full text-left px-4 py-3 hover:bg-green-50 text-saas-text-main font-bold flex items-center gap-2 transition-colors"
-                        >
-                          📧 {lang === 'fr' ? 'Envoyer par Email' : 'إرسال بالبريد الإلكتروني'}
                         </button>
                       </motion.div>
                     )}
@@ -1279,54 +1200,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                   className="flex-1 btn-saas-danger"
                 >
                   🗑️ {lang === 'fr' ? 'Supprimer' : 'حذف'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Contract Print Modal — print the contract or its conditions */}
-      <AnimatePresence>
-        {showPrintModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass-card max-w-md w-full p-6 border border-saas-border"
-            >
-              <h3 className="text-xl font-black text-saas-text-main mb-6">
-                🖨️ {lang === 'fr' ? 'Impression du Contrat' : 'طباعة العقد'}
-              </h3>
-              <p className="text-saas-text-muted mb-6">
-                {lang === 'fr' ? 'Que voulez-vous imprimer ?' : 'ماذا تريد أن تطبع؟'}
-              </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => {
-                    const reservation = showPrintModal.reservation;
-                    setShowPrintModal(null);
-                    setShowPersonalization({ reservation, type: 'contract' });
-                  }}
-                  className="w-full bg-saas-primary-start hover:bg-saas-primary-end text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  📄 {lang === 'fr' ? 'Imprimer le Contrat' : 'طباعة العقد'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowPrintModal(null);
-                    setShowConditionsModal(true);
-                    setConditionsLanguage('ar'); // Reset to Arabic when opening
-                  }}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  🖨️ {lang === 'fr' ? 'Imprimer les Conditions' : 'طباعة الشروط'}
                 </button>
               </div>
             </motion.div>
@@ -1562,17 +1435,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           onComplete={updateReservation}
         />
       )}
-      
-      {/* Send Contract by Email Modal */}
-      <AnimatePresence>
-        {showSendContractModal && (
-          <SendContractModal
-            lang={lang}
-            reservation={showSendContractModal}
-            onClose={() => setShowSendContractModal(null)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };
@@ -2595,12 +2457,21 @@ export const PersonalizationModal: React.FC<{
     const scaleFactor = 1;
     const carImageUrl = reservation?.car?.images?.[0] || '';
 
+    // Themed document font: traditional Naskh serif for Arabic (common on
+    // Algerian official documents), formal serif for French.
+    const docFontFamily = isFrench
+      ? "'Marcellus', 'Cormorant Garamond', Georgia, serif"
+      : "'Amiri', 'Aref Ruqaa', 'Traditional Arabic', serif";
+
     const html = `
     <!DOCTYPE html>
     <html dir="${textDir}" lang="${isFrench ? 'fr' : 'ar'}">
     <head>
       <meta charset="UTF-8">
       <title>Contrat de Location</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Aref+Ruqaa:wght@400;700&family=Marcellus&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -2645,38 +2516,42 @@ export const PersonalizationModal: React.FC<{
         }
         .logo {
           display: block;
-          max-width: ${hasSecondConductor ? '230px' : '270px'};
-          max-height: ${hasSecondConductor ? '110px' : '130px'};
+          max-width: ${hasSecondConductor ? '275px' : '320px'};
+          max-height: ${hasSecondConductor ? '132px' : '156px'};
           width: auto;
           height: auto;
           object-fit: contain;
         }
         .agency-name {
-          font-size: ${hasSecondConductor ? '18px' : '20px'};
-          font-weight: 800;
+          font-size: ${hasSecondConductor ? '21px' : '24px'};
+          font-weight: 900;
           color: #1a3a8a;
           text-align: center;
           margin: 0 auto 2px;
           line-height: 1.15;
-          letter-spacing: 1.5px;
+          letter-spacing: ${isFrench ? '2px' : '0.5px'};
           text-transform: uppercase;
-          font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, Arial, sans-serif;
+          font-family: ${docFontFamily};
         }
         .agency-contact {
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
-          color: #333;
+          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          color: #1f2937;
           font-weight: 700;
-          line-height: 1.45;
+          line-height: 1.5;
           display: flex;
           flex-direction: column;
           align-items: flex-end;
           text-align: right;
-          gap: 2px;
+          gap: 3px;
           flex-shrink: 0;
+          font-family: ${docFontFamily};
         }
         .agency-contact-item {
           margin: 0;
           white-space: nowrap;
+        }
+        .agency-contact-item strong {
+          color: #1a3a8a;
         }
         .agency-contact-label {
           font-weight: 600;
@@ -2684,47 +2559,13 @@ export const PersonalizationModal: React.FC<{
           display: none;
         }
         .contract-title {
-          font-size: ${hasSecondConductor ? '15px' : '17px'};
-          font-weight: 700;
-          color: #333;
+          font-size: ${hasSecondConductor ? '19px' : '22px'};
+          font-weight: 900;
+          color: #1a3a8a;
           text-align: center;
           margin: 0;
-          letter-spacing: 0.5px;
-          font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, Arial, sans-serif;
-        }
-        .header-info {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: ${hasSecondConductor ? '2px' : '3px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
-        }
-        .info-box {
-          padding: ${hasSecondConductor ? '3px 4px' : '4px 5px'};
-          border-radius: 3px;
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
-          line-height: 1.3;
-        }
-        .info-box.blue {
-          background-color: #dbeafe;
-          border-left: 4px solid #2563eb;
-        }
-        .info-box.green {
-          background-color: #dcfce7;
-          border-left: 4px solid #16a34a;
-        }
-        .info-box.amber {
-          background-color: #fef3c7;
-          border-left: 4px solid #d97706;
-        }
-        .info-label {
-          font-weight: 600;
-          color: #222;
-          margin-bottom: 1px;
-          font-size: ${hasSecondConductor ? '10px' : '11px'};
-        }
-        .info-value {
-          color: #333;
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
+          letter-spacing: ${isFrench ? '1px' : '0'};
+          font-family: ${docFontFamily};
         }
         .info-table {
           width: 100%;
@@ -2780,12 +2621,12 @@ export const PersonalizationModal: React.FC<{
           border: 1px solid #fde68a;
         }
         .section.conditions-section {
-          background-color: #faf5ff;
-          border: 1px solid #e9d5ff;
+          background-color: #eef2fb;
+          border: 1px solid #c7d2ee;
         }
         .section.inspection-section {
-          background-color: #faf5ff;
-          border: 1px solid #e9d5ff;
+          background-color: #eef2fb;
+          border: 1px solid #c7d2ee;
         }
         .section.statement-section {
           background-color: #f8fafc;
@@ -3089,6 +2930,14 @@ export const PersonalizationModal: React.FC<{
                 <div class="field-value">${reservation?.client?.firstName} ${reservation?.client?.lastName}</div>
               </div>
               <div class="field">
+                <div class="field-label">${labels.birthDate}</div>
+                <div class="field-value">${new Date(reservation?.client?.dateOfBirth).toLocaleDateString('fr-FR')}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">${labels.birthPlace}</div>
+                <div class="field-value">${reservation?.client?.placeOfBirth || 'N/A'}</div>
+              </div>
+              <div class="field">
                 <div class="field-label">${labels.licenseNumber}</div>
                 <div class="field-value">${reservation?.client?.licenseNumber || 'N/A'}</div>
               </div>
@@ -3103,14 +2952,6 @@ export const PersonalizationModal: React.FC<{
               <div class="field">
                 <div class="field-label">${labels.licenseDeliveryPlace}</div>
                 <div class="field-value">${reservation?.client?.licenseDeliveryPlace || ''}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.birthDate}</div>
-                <div class="field-value">${new Date(reservation?.client?.dateOfBirth).toLocaleDateString('fr-FR')}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.birthPlace}</div>
-                <div class="field-value">${reservation?.client?.placeOfBirth || 'N/A'}</div>
               </div>
             </div>
           </div>

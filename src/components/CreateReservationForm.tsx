@@ -143,18 +143,17 @@ const SignaturePad: React.FC<{
 interface CreateReservationFormProps {
   lang: Language;
   onBack: () => void;
-  inspectionMode?: boolean;
   initialData?: Partial<ReservationDetails>;
   defaultStatus?: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
   user?: any;
   // Alternative step order:
   // 1) Dates & Lieux  2) Véhicule  3) Tarification Finale (sans infos client)
-  // 4) Client  5) Services  6) Inspection Départ (+ création)
+  // 4) Client  5) Services
   altFlow?: boolean;
 }
 
-export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, inspectionMode = false, initialData, defaultStatus = 'confirmed', user, altFlow = false }) => {
-  const [currentStep, setCurrentStep] = useState(inspectionMode ? 3 : 1);
+export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, initialData, defaultStatus = 'confirmed', user, altFlow = false }) => {
+  const [currentStep, setCurrentStep] = useState(1);
   const [agencies, setAgencies] = useState<any[]>([]);
   const [isLoadingAgencies, setIsLoadingAgencies] = useState(true);
 
@@ -177,60 +176,6 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     loadAgencies();
   }, []);
 
-  // When in inspection mode with initialData, map additionalServices and other data to step5
-  useEffect(() => {
-    if (inspectionMode && initialData) {
-      const services = (initialData as any).additionalServices;
-      const updates: any = {};
-      // Auto-select services
-      if (services && services.length > 0 && !formData.step5?.additionalServices?.length) {
-        updates.step5 = {
-          additionalServices: services
-        };
-      }
-      // Auto-select locations from step1
-      if (!formData.step1?.departureLocation) {
-        // First try to get from step1, then try direct properties
-        const departureLocation = (initialData as any).step1?.departureLocation || (initialData as any).departureLocation || '';
-        const returnLocation = (initialData as any).step1?.returnLocation || (initialData as any).returnLocation || departureLocation;
-        const departureDate = (initialData as any).step1?.departureDate || (initialData as any).departureDate || formData.step1?.departureDate;
-        const returnDate = (initialData as any).step1?.returnDate || (initialData as any).returnDate || formData.step1?.returnDate;
-        const departureTime = (initialData as any).step1?.departureTime || (initialData as any).departureTime || '';
-        const returnTime = (initialData as any).step1?.returnTime || (initialData as any).returnTime || '';
-        
-        updates.step1 = {
-          ...(formData.step1 || {}),
-          departureLocation,
-          returnLocation,
-          departureDate,
-          returnDate,
-          departureTime,
-          returnTime,
-          departureAgency: (initialData as any).step1?.departureAgency,
-          returnAgency: (initialData as any).step1?.returnAgency
-        };
-      }
-      // Auto-select car
-      if (!formData.step2?.selectedCar && (initialData as any).car) {
-        updates.step2 = {
-          selectedCar: (initialData as any).car
-        };
-      }
-      // Auto-select client
-      if (!formData.step4?.selectedClient && (initialData as any).client) {
-        updates.step4 = {
-          selectedClient: (initialData as any).client
-        };
-      }
-      if (Object.keys(updates).length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          ...updates
-        }));
-      }
-    }
-  }, [inspectionMode, initialData]);
-
   const [formData, setFormData] = useState<Partial<ReservationDetails>>(initialData || {
     step1: {
       departureDate: '',
@@ -242,9 +187,6 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     },
     step2: {
       selectedCar: null
-    },
-    step3: {
-      departureInspection: null
     },
     step4: {
       selectedClient: null
@@ -264,40 +206,29 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     }
   });
 
-  const totalSteps = 6;
+  const totalSteps = 5;
   const steps = altFlow ? [
     { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
     { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
     { id: 3, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' },
     { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
-    { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
-    { id: 6, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' }
+    { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' }
   ] : [
     { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
     { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
-    { id: 3, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' },
-    { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
-    { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
-    { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
+    { id: 3, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
+    { id: 4, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
+    { id: 5, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
   ];
 
   const handleNext = () => {
-    if (inspectionMode && currentStep === 3) {
-      // In inspection mode: step 3 (inspection) -> step 5 (services), skip client
-      setCurrentStep(5);
-    } else if (currentStep < totalSteps) {
+    if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (inspectionMode && currentStep === 5) {
-      // Go back to step 3 (inspection) when in inspection mode from services
-      setCurrentStep(3);
-    } else if (inspectionMode && currentStep === 6) {
-      // Go back to step 5 (services) from pricing in inspection mode
-      setCurrentStep(5);
-    } else if (currentStep > 1) {
+    if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
@@ -308,12 +239,9 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       const departureAgency = agencies.find(a => a.name === formData.step1?.departureLocation || a.address === formData.step1?.departureLocation);
       const returnAgency = agencies.find(a => a.name === formData.step1?.returnLocation || a.address === formData.step1?.returnLocation) || departureAgency;
 
-      // Skip agency validation if inspectionMode (for both pending and accepted reservations)
-      if (!(inspectionMode && initialData)) {
-        if (!departureAgency || !returnAgency) {
-          alert(lang === 'fr' ? 'Agence introuvable' : 'الوكالة غير موجودة');
-          return;
-        }
+      if (!departureAgency || !returnAgency) {
+        alert(lang === 'fr' ? 'Agence introuvable' : 'الوكالة غير موجودة');
+        return;
       }
 
       // Calculate total days
@@ -326,141 +254,113 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       const remainingPayment = Math.max(0, totalPrice - advancePayment);
 
       // Create reservation using ReservationsService
-      // Skip client/car validation if inspectionMode (for both pending and accepted reservations)
-      if (!(inspectionMode && initialData)) {
-        if (!formData.step4?.selectedClient?.id || !formData.step2?.selectedCar?.id || !departureAgency?.id || !returnAgency?.id) {
-          alert(lang === 'fr' ? 'Veuillez sélectionner un client, un véhicule et des agences valides.' : 'يرجى اختيار عميل ومركبة ووكالات صحيحة.');
-          return;
-        }
+      if (!formData.step4?.selectedClient?.id || !formData.step2?.selectedCar?.id || !departureAgency?.id || !returnAgency?.id) {
+        alert(lang === 'fr' ? 'Veuillez sélectionner un client, un véhicule et des agences valides.' : 'يرجى اختيار عميل ومركبة ووكالات صحيحة.');
+        return;
       }
-      let clientId = formData.step4?.selectedClient?.id || '';
-      let carId = formData.step2?.selectedCar?.id || '';
-      let departureAgencyId = departureAgency?.id || '';
-      let returnAgencyId = returnAgency?.id || '';
-      if (inspectionMode && initialData) {
-        clientId = (initialData as any)?.client?.id || '';
-        carId = (initialData as any)?.car?.id || '';
-        departureAgencyId = (initialData as any)?.departure_agency_id || (initialData as any)?.departureAgencyId || (initialData as any)?.step1?.departureAgency || '';
-        returnAgencyId = (initialData as any)?.return_agency_id || (initialData as any)?.returnAgencyId || (initialData as any)?.step1?.returnAgency || '';
-        // Block if any required UUID is missing
-        if (!clientId || !carId || !departureAgencyId || !returnAgencyId) {
-          alert(lang === 'fr' ? "Impossible de créer la réservation: données manquantes (client, véhicule ou agence)." : "لا يمكن إنشاء الحجز: بيانات مفقودة (عميل أو مركبة أو وكالة).");
-          return;
-        }
-      }
-      
-      // Use appropriate function based on mode
+      const clientId = formData.step4?.selectedClient?.id || '';
+      const carId = formData.step2?.selectedCar?.id || '';
+      const departureAgencyId = departureAgency?.id || '';
+      const returnAgencyId = returnAgency?.id || '';
+
+      // Déclaré HORS du try pour rester accessible dans le catch (sinon
+      // ReferenceError: workerFullName is not defined lors d'une erreur).
+      let workerFullName: string | null = null;
       let reservationId: string;
-      if (inspectionMode && initialData) {
-        // Update existing reservation in inspection mode and change status to confirmed
-        reservationId = (initialData as any).id;
-        await ReservationsService.updateReservation(reservationId, {
-          status: 'confirmed',
-          notes: formData.step6?.notes || '',
+      try {
+        // Fetch worker's full name from database using email
+        if (user?.email) {
+          try {
+            console.log('🔍 Fetching worker by email:', user.email);
+
+            const { data: workerData, error: workerError } = await supabase
+              .from('workers')
+              .select('full_name, email, username')
+              .eq('email', user.email)
+              .single();
+
+            console.log('📦 Worker query result:', {
+              data: workerData,
+              error: workerError?.message
+            });
+
+            if (!workerError && workerData) {
+              workerFullName = workerData.full_name;
+              console.log('✅ Successfully fetched worker full_name:', workerFullName);
+            } else {
+              console.log('⚠️ Could not fetch worker:', workerError?.message);
+            }
+          } catch (err: any) {
+            console.error('❌ Error fetching worker:', err);
+          }
+        }
+
+        // Fallback: if we couldn't resolve a worker row, use the logged-in
+        // user's display name (full_name / username). We skip it only when the
+        // display name is just the email, so we never store an email as creator.
+        if (!workerFullName) {
+          const displayName = (user?.name || '').trim();
+          if (displayName && displayName.toLowerCase() !== (user?.email || '').trim().toLowerCase()) {
+            workerFullName = displayName;
+            console.log('ℹ️ Falling back to logged-in user name as creator:', workerFullName);
+          }
+        }
+
+        console.log('Creating reservation with creator info:', {
+          userEmail: user?.email,
+          workerFullName: workerFullName
+        });
+
+        const result = await ReservationsService.createReservation({
+          clientId,
+          carId,
+          departureDate: formData.step1?.departureDate || '',
+          departureTime: formData.step1?.departureTime || '',
+          departureAgencyId,
+          returnDate: formData.step1?.returnDate || '',
+          returnTime: formData.step1?.returnTime || '',
+          returnAgencyId,
+          pricePerDay: formData.step2?.selectedCar?.priceDay || 0,
+          priceWeek: formData.step2?.selectedCar?.priceWeek || 0,
+          priceMonth: formData.step2?.selectedCar?.priceMonth || 0,
+          totalDays: totalDays,
           totalPrice: totalPrice,
+          deposit: formData.step2?.selectedCar?.deposit || 0,
           advancePayment: advancePayment,
           remainingPayment: remainingPayment,
+          status: 'confirmed', // les nouvelles réservations sont créées directement confirmées
+          notes: formData.step6?.notes || '',
+          // Caution and Assurance fields
+          cautionAmountDzd: (formData.step6 as any)?.caution_amount_dzd || formData.step2?.selectedCar?.deposit || 0,
+          cautionCurrency: (formData.step6 as any)?.cautionCurrency || 'DZD',
+          euroRate: (formData.step6 as any)?.euroRate || 145,
+          assuranceEnabled: (formData.step6 as any)?.assuranceEnabled || false,
+          assurancePercentage: (formData.step6 as any)?.assuranceEnabled
+            ? (formData.step6 as any)?.assurancePercentage !== ''
+              ? Number((formData.step6 as any)?.assurancePercentage)
+              : 0
+            : 0,
+          // Assurance de protection sélectionnée (snapshot nom + prix/jour)
+          protectionAssuranceId: formData.protectionAssurance?.id || null,
+          protectionAssuranceName: formData.protectionAssurance?.name || null,
+          protectionAssurancePrice: formData.protectionAssurance?.pricePerDay ?? null,
+          // Creator info - Only save name since User object doesn't have ID
+          createdBy: null,  // No user ID available in current auth system
+          createdByName: workerFullName || null,
         });
-      } else {
-        // Create new reservation
-        // Déclaré HORS du try pour rester accessible dans le catch (sinon
-        // ReferenceError: workerFullName is not defined lors d'une erreur).
-        let workerFullName: string | null = null;
-        try {
-          // Fetch worker's full name from database using email
-          if (user?.email) {
-            try {
-              console.log('🔍 Fetching worker by email:', user.email);
-              
-              const { data: workerData, error: workerError } = await supabase
-                .from('workers')
-                .select('full_name, email, username')
-                .eq('email', user.email)
-                .single();
-              
-              console.log('📦 Worker query result:', {
-                data: workerData,
-                error: workerError?.message
-              });
-              
-              if (!workerError && workerData) {
-                workerFullName = workerData.full_name;
-                console.log('✅ Successfully fetched worker full_name:', workerFullName);
-              } else {
-                console.log('⚠️ Could not fetch worker:', workerError?.message);
-              }
-            } catch (err: any) {
-              console.error('❌ Error fetching worker:', err);
-            }
-          }
 
-          // Fallback: if we couldn't resolve a worker row, use the logged-in
-          // user's display name (full_name / username). We skip it only when the
-          // display name is just the email, so we never store an email as creator.
-          if (!workerFullName) {
-            const displayName = (user?.name || '').trim();
-            if (displayName && displayName.toLowerCase() !== (user?.email || '').trim().toLowerCase()) {
-              workerFullName = displayName;
-              console.log('ℹ️ Falling back to logged-in user name as creator:', workerFullName);
-            }
+        console.log('✅ Reservation created successfully with ID:', result.id);
+        reservationId = result.id;
+      } catch (creationError: any) {
+        console.error('❌ Error creating reservation with creator info:', {
+          error: creationError?.message,
+          details: creationError,
+          creatorData: {
+            createdBy: null,
+            createdByName: workerFullName
           }
-          
-          console.log('Creating reservation with creator info:', {
-            userEmail: user?.email,
-            workerFullName: workerFullName
-          });
-          
-          const result = await ReservationsService.createReservation({
-            clientId,
-            carId,
-            departureDate: formData.step1?.departureDate || '',
-            departureTime: formData.step1?.departureTime || '',
-            departureAgencyId,
-            returnDate: formData.step1?.returnDate || '',
-            returnTime: formData.step1?.returnTime || '',
-            returnAgencyId,
-            pricePerDay: formData.step2?.selectedCar?.priceDay || 0,
-            priceWeek: formData.step2?.selectedCar?.priceWeek || 0,
-            priceMonth: formData.step2?.selectedCar?.priceMonth || 0,
-            totalDays: totalDays,
-            totalPrice: totalPrice,
-            deposit: formData.step2?.selectedCar?.deposit || 0,
-            advancePayment: advancePayment,
-            remainingPayment: remainingPayment,
-            status: 'confirmed', // les nouvelles réservations sont créées directement confirmées
-            notes: formData.step6?.notes || '',
-            // Caution and Assurance fields
-            cautionAmountDzd: (formData.step6 as any)?.caution_amount_dzd || formData.step2?.selectedCar?.deposit || 0,
-            cautionCurrency: (formData.step6 as any)?.cautionCurrency || 'DZD',
-            euroRate: (formData.step6 as any)?.euroRate || 145,
-            assuranceEnabled: (formData.step6 as any)?.assuranceEnabled || false,
-            assurancePercentage: (formData.step6 as any)?.assuranceEnabled
-              ? (formData.step6 as any)?.assurancePercentage !== ''
-                ? Number((formData.step6 as any)?.assurancePercentage)
-                : 0
-              : 0,
-            // Assurance de protection sélectionnée (snapshot nom + prix/jour)
-            protectionAssuranceId: formData.protectionAssurance?.id || null,
-            protectionAssuranceName: formData.protectionAssurance?.name || null,
-            protectionAssurancePrice: formData.protectionAssurance?.pricePerDay ?? null,
-            // Creator info - Only save name since User object doesn't have ID
-            createdBy: null,  // No user ID available in current auth system
-            createdByName: workerFullName || null,
-          });
-          
-          console.log('✅ Reservation created successfully with ID:', result.id);
-          reservationId = result.id;
-        } catch (creationError: any) {
-          console.error('❌ Error creating reservation with creator info:', {
-            error: creationError?.message,
-            details: creationError,
-            creatorData: {
-              createdBy: null,
-              createdByName: workerFullName
-            }
-          });
-          throw creationError;
-        }
+        });
+        throw creationError;
       }
 
       // Save selected services
@@ -469,95 +369,9 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         await ReservationsService.updateReservationServices(reservationId, selectedServices);
       }
 
-      // Save departure inspection if present
-      const inspection = formData.step3?.departureInspection;
-      if (inspection) {
-        try {
-          // Determine agency_id: prefer explicit agency id from step1, else fallback to first agency
-          const agencyId = formData.step1?.departureAgency || (agencies && agencies[0]?.id) || '';
-
-          // Check if a departure inspection already exists for this reservation
-          const existingDeparture = formData.departureInspection;
-          if (existingDeparture && existingDeparture.id) {
-            // Update existing inspection
-            await DatabaseService.updateVehicleInspection(existingDeparture.id, {
-              mileage: inspection.mileage || 0,
-              fuel_level: inspection.fuelLevel || 'full',
-              agency_id: agencyId,
-              exterior_front_photo: inspection.exteriorPhotos?.[0] || null,
-              exterior_rear_photo: inspection.exteriorPhotos?.[1] || null,
-              interior_photo: inspection.interiorPhotos?.[0] || null,
-              other_photos: inspection.other_photos || inspection.otherPhotos || [],
-              client_signature: inspection.signature || inspection.client_signature || null,
-              notes: inspection.notes || null,
-              date: inspection.date || new Date().toISOString().split('T')[0],
-              time: inspection.time || new Date().toTimeString().split(' ')[0]
-            });
-
-            // Save checklist responses for ALL items (store true/false)
-            const responses = (inspection.inspectionItems || []).map((it: any) => ({
-              inspection_id: existingDeparture.id,
-              checklist_item_id: it.id,
-              status: !!it.checked,
-              note: it.note || null
-            }));
-
-            if (responses.length > 0) {
-              await DatabaseService.upsertInspectionResponses(responses);
-            }
-
-            // Update car mileage
-            if (inspection.mileage && inspection.mileage > 0) {
-              await DatabaseService.updateCar(formData.step2.selectedCar.id, {
-                mileage: inspection.mileage
-              });
-            }
-          } else {
-            // Create new inspection if none exists
-            const createdInspection = await DatabaseService.createVehicleInspection({
-              reservation_id: reservationId,
-              type: 'departure',
-              mileage: inspection.mileage || 0,
-              fuel_level: inspection.fuelLevel || 'full',
-              agency_id: agencyId,
-              exterior_front_photo: inspection.exteriorPhotos?.[0] || null,
-              exterior_rear_photo: inspection.exteriorPhotos?.[1] || null,
-              interior_photo: inspection.interiorPhotos?.[0] || null,
-              other_photos: inspection.other_photos || inspection.otherPhotos || [],
-              client_signature: inspection.signature || inspection.client_signature || null,
-              notes: inspection.notes || null,
-              date: inspection.date || new Date().toISOString().split('T')[0],
-              time: inspection.time || new Date().toTimeString().split(' ')[0]
-            });
-
-            // Save checklist responses for ALL items (store true/false)
-            const responses = (inspection.inspectionItems || []).map((it: any) => ({
-              inspection_id: createdInspection.id,
-              checklist_item_id: it.id,
-              status: !!it.checked,
-              note: it.note || null
-            }));
-
-            if (responses.length > 0) {
-              await DatabaseService.upsertInspectionResponses(responses);
-            }
-
-            // Update car mileage
-            if (inspection.mileage && inspection.mileage > 0) {
-              await DatabaseService.updateCar(formData.step2.selectedCar.id, {
-                mileage: inspection.mileage
-              });
-            }
-          }
-        } catch (err) {
-          console.error('Error saving inspection:', err);
-        }
-      }
-
-
       onBack();
     } catch (err: any) {
-      console.error('❌ Error ' + (inspectionMode && initialData ? 'updating' : 'creating') + ' reservation:', {
+      console.error('❌ Error creating reservation:', {
         message: err?.message,
         error: err,
         stack: err?.stack
@@ -601,7 +415,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
               ➕ {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
             </h2>
             <p className="text-white font-bold uppercase text-[10px] tracking-widest">
-              {`${lang === 'fr' ? 'Étape' : 'الخطوة'} ${currentStep} ${lang === 'fr' ? 'sur' : 'من'} 6`}
+              {`${lang === 'fr' ? 'Étape' : 'الخطوة'} ${currentStep} ${lang === 'fr' ? 'sur' : 'من'} ${totalSteps}`}
             </p>
           </div>
         </div>
@@ -610,7 +424,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       {/* Progress Bar */}
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
         <div className="flex items-center justify-between mb-4">
-          {steps.filter(step => !inspectionMode || [3, 5, 6].includes(step.id)).map((step) => (
+          {steps.map((step) => (
             <div key={step.id} className="flex flex-col items-center flex-1">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg mb-2 transition-colors ${
                 step.id < currentStep ? 'bg-green-500 text-white' :
@@ -630,7 +444,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         <div className="w-full bg-slate-200 rounded-full h-2">
           <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 5 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
+            style={{ width: `${(currentStep / totalSteps) * 100}%` }}
           />
         </div>
       </div>
@@ -648,22 +462,20 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           <div className="p-8">
             {altFlow ? (
               <>
-                {/* Alternative order: Dates → Véhicule → Tarification (sans client) → Client → Services → Inspection */}
-                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} inspectionMode={inspectionMode} initialData={initialData} />}
+                {/* Alternative order: Dates → Véhicule → Tarification (sans client) → Client → Services */}
+                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} />}
                 {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 3 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} hideClientInfo={true} />}
+                {currentStep === 3 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} hideClientInfo={true} />}
                 {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
                 {currentStep === 5 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 6 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
               </>
             ) : (
               <>
-                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} inspectionMode={inspectionMode} initialData={initialData} />}
+                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} />}
                 {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 3 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 5 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 6 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} />}
+                {currentStep === 3 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
+                {currentStep === 4 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
+                {currentStep === 5 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} />}
               </>
             )}
           </div>
@@ -713,9 +525,7 @@ export const Step1DatesLocations: React.FC<{
   setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
   agencies: any[];
   isLoadingAgencies: boolean;
-  inspectionMode?: boolean;
-  initialData?: Partial<ReservationDetails>;
-}> = ({ lang, formData, setFormData, agencies, isLoadingAgencies, inspectionMode = false, initialData }) => {
+}> = ({ lang, formData, setFormData, agencies, isLoadingAgencies }) => {
   const [showReturnLocation, setShowReturnLocation] = useState(false);
 
   return (
@@ -765,46 +575,22 @@ export const Step1DatesLocations: React.FC<{
             <label className="block font-bold text-slate-900 mb-2">
               📍 {lang === 'fr' ? 'Lieu de Prise en Charge' : 'مكان الاستلام'}
             </label>
-            {inspectionMode && initialData && initialData.status === 'accepted' ? (
-              <div className="w-full p-3 border border-slate-200 rounded-lg bg-slate-100 text-lg font-bold text-slate-900">
-                {(() => {
-                  if (!agencies || agencies.length === 0) {
-                    return 'Erreur: agences non chargées.';
-                  }
-                  let agencyId = initialData.departure_agency_id || initialData.departureAgencyId;
-                  // Only fallback if agencyId is truly missing
-                  if (!agencyId) {
-                    if (initialData.client && (initialData.client.agencyId || initialData.client.agency_id)) {
-                      agencyId = initialData.client.agencyId || initialData.client.agency_id;
-                    } else if (formData.step4?.selectedClient && (formData.step4.selectedClient.agencyId || formData.step4.selectedClient.agency_id)) {
-                      agencyId = formData.step4.selectedClient.agencyId || formData.step4.selectedClient.agency_id;
-                    }
-                  }
-                  if (agencyId) {
-                    const agency = agencies.find(a => a.id === agencyId);
-                    return agency ? `${agency.name}${agency.address ? ' - ' + agency.address : ''}` : `Erreur: agence non trouvée (ID: ${agencyId})`;
-                  }
-                  return 'Erreur: ID agence non spécifié.';
-                })()}
-              </div>
-            ) : (
-              <select
-                value={formData.step1?.departureLocation || ''}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  step1: { ...prev.step1!, departureLocation: e.target.value }
-                }))}
-                disabled={isLoadingAgencies}
-                className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-slate-100"
-              >
-                <option value="">{isLoadingAgencies ? (lang === 'fr' ? 'Chargement...' : 'جاري التحميل...') : (lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...')}</option>
-                {agencies.map((agency) => (
-                  <option key={agency.id} value={agency.name || agency.address}>
-                    {agency.name} {agency.address ? `- ${agency.address}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+            <select
+              value={formData.step1?.departureLocation || ''}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                step1: { ...prev.step1!, departureLocation: e.target.value }
+              }))}
+              disabled={isLoadingAgencies}
+              className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-slate-100"
+            >
+              <option value="">{isLoadingAgencies ? (lang === 'fr' ? 'Chargement...' : 'جاري التحميل...') : (lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...')}</option>
+              {agencies.map((agency) => (
+                <option key={agency.id} value={agency.name || agency.address}>
+                  {agency.name} {agency.address ? `- ${agency.address}` : ''}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -2888,13 +2674,11 @@ export const Step6FinalPricing: React.FC<{
   lang: Language;
   formData: Partial<ReservationDetails>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
-  inspectionMode?: boolean;
-  initialData?: Partial<ReservationDetails>;
   agencies: any[];
   // When true, hide the client information section (used when this step is shown
   // before the client has been selected in the alternative flow).
   hideClientInfo?: boolean;
-}> = ({ lang, formData, setFormData, inspectionMode, initialData, agencies, hideClientInfo = false }) => {
+}> = ({ lang, formData, setFormData, agencies, hideClientInfo = false }) => {
   const [tvaEnabled, setTvaEnabled] = useState(false);
   const [tvaRate, setTvaRate] = useState(19); // Default TVA rate
   const [advancePayment, setAdvancePayment] = useState(0);
@@ -3252,9 +3036,7 @@ export const Step6FinalPricing: React.FC<{
             <p className="text-lg font-bold text-slate-900">{
               (() => {
                 let agencyId = null;
-                if (inspectionMode && initialData && initialData.status === 'accepted') {
-                  agencyId = initialData.departure_agency_id;
-                } else if (formData.step1?.departureLocation) {
+                if (formData.step1?.departureLocation) {
                   // Try to match by agency name
                   const agencyByName = (agencies || []).find(a => a.name === formData.step1.departureLocation);
                   if (agencyByName) return `${agencyByName.name}${agencyByName.address ? ' - ' + agencyByName.address : ''}`;
@@ -3272,19 +3054,11 @@ export const Step6FinalPricing: React.FC<{
           <div className="bg-white rounded-lg p-4 border border-slate-200">
             <p className="text-sm font-bold text-slate-700 mb-1">📍 {lang === 'fr' ? 'Lieu de Retour' : 'مكان العودة'}</p>
             <p className="text-lg font-bold text-slate-900">{
-              inspectionMode && initialData && initialData.status === 'accepted'
-                ? (() => {
-                    if (initialData.return_agency_id) {
-                      const agency = (agencies || []).find(a => a.id === initialData.return_agency_id);
-                      return agency ? `${agency.name}${agency.address ? ' - ' + agency.address : ''}` : 'Agence non trouvée';
-                    }
-                    return 'Non spécifié';
-                  })()
-                : (formData.step1?.returnLocation && formData.step1?.returnLocation.trim() !== ''
-                    ? formData.step1?.returnLocation
-                    : ((formData.step1?.departureLocation && formData.step1?.departureLocation.trim() !== '')
-                        ? formData.step1?.departureLocation
-                        : 'Non spécifié'))
+              formData.step1?.returnLocation && formData.step1?.returnLocation.trim() !== ''
+                ? formData.step1?.returnLocation
+                : ((formData.step1?.departureLocation && formData.step1?.departureLocation.trim() !== '')
+                    ? formData.step1?.departureLocation
+                    : 'Non spécifié')
             }</p>
           </div>
           {formData.step3?.selectedDriver && (
