@@ -1185,8 +1185,14 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             const fresh = await ReservationsService.getReservationById(reservationId);
             setReservations(prev => prev.map(r => r.id === fresh.id ? fresh : r));
             setShowDebtModal(null);
-          } catch (err) {
+          } catch (err: any) {
             console.error('Failed to save payment', err);
+            alert(
+              (lang === 'fr'
+                ? "Échec de l'enregistrement du paiement : "
+                : 'فشل تسجيل الدفعة: ') + (err?.message || err)
+            );
+            throw err;
           }
         }}
       />
@@ -1919,8 +1925,13 @@ const PayDebtModal: React.FC<{
   const handleSave = async () => {
     if (!amountNum || amountNum <= 0) return;
     setIsSaving(true);
-    await onSave(reservation.id, amountNum, method, note, newRemaining);
-    setIsSaving(false);
+    try {
+      await onSave(reservation.id, amountNum, method, note, newRemaining);
+    } catch {
+      // Error already surfaced by the parent onSave handler; keep modal open.
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

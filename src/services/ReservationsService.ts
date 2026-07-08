@@ -1041,7 +1041,7 @@ export class ReservationsService {
       .insert([{
         reservation_id: data.reservationId,
         amount: data.amount,
-        payment_method: data.paymentMethod,
+        method: data.paymentMethod,
         date: data.date,
         note: data.note,
       }])
@@ -1066,7 +1066,7 @@ export class ReservationsService {
       reservationId: p.reservation_id,
       amount: p.amount,
       date: p.date,
-      method: p.payment_method,
+      method: p.method,
       note: p.note,
       createdAt: p.created_at,
     }));
