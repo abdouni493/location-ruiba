@@ -492,7 +492,7 @@ export const generateContractHTML = (
             </div>
             <div class="field">
               <div class="field-label">${labels.mileageStart}</div>
-              <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 0) + ' km')}</div>
+              <div class="field-value">${ltr((reservation?.departureInspection?.mileage || reservation?.car?.mileage || 0) + ' km')}</div>
             </div>
             <div class="field">
               <div class="field-label">${labels.fuelStart}</div>

@@ -13,7 +13,7 @@ import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
-import { generateConditionsPrintHTML, getConditionsTemplate } from '../constants/ConditionsTemplates';
+import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
 
 /**
  * Force a phone number (or any latin/number string) to render strictly left-to-right,
@@ -1213,162 +1213,85 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+            onClick={() => setShowConditionsModal(false)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden"
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
             >
-              {/* Sleek Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg md:text-xl font-bold text-white truncate">
+              {/* Header — same design as the contract interface */}
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold text-white">
                     {conditionsLanguage === 'fr' ? 'Conditions de Location' : 'شروط الإيجار'}
                   </h2>
-                  <p className="text-blue-100 text-xs md:text-sm mt-1 truncate">
-                    {(() => {
-                      const template = getConditionsTemplate(conditionsLanguage);
-                      return template.subtitle;
-                    })()}
-                  </p>
+                  {/* Template Selector */}
+                  <div className="flex gap-2 ml-8">
+                    <button
+                      onClick={() => setConditionsLanguage('fr')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        conditionsLanguage === 'fr'
+                          ? 'bg-white text-blue-600'
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      🇫🇷 Français
+                    </button>
+                    <button
+                      onClick={() => setConditionsLanguage('ar')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        conditionsLanguage === 'ar'
+                          ? 'bg-white text-blue-600'
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      🇸🇦 العربية
+                    </button>
+                  </div>
                 </div>
-
-                {/* Close Button */}
                 <button
                   onClick={() => setShowConditionsModal(false)}
-                  className="flex-shrink-0 ml-3 p-2 hover:bg-white/20 rounded-lg transition"
-                  aria-label="Close"
+                  className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-all"
                 >
-                  <X size={22} className="text-white" />
+                  <X size={24} />
                 </button>
               </div>
 
-              {/* Main Content */}
-              <div className="p-4 md:p-6 lg:p-8">
-                {/* Language Toggle - Minimal */}
-                <div className="flex gap-2 mb-6">
-                  <button
-                    onClick={() => setConditionsLanguage('ar')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'ar'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    العربية
-                  </button>
-                  <button
-                    onClick={() => setConditionsLanguage('fr')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'fr'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Français
-                  </button>
-                </div>
-
-                {/* Conditions Table - Streamlined */}
-                <div className="overflow-hidden rounded-lg border border-gray-200 mb-6">
-                  <div style={{ direction: conditionsLanguage === 'ar' ? 'rtl' : 'ltr', textAlign: conditionsLanguage === 'ar' ? 'right' : 'left' }}>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="w-8 px-3 py-3 text-center font-semibold text-gray-700">#</th>
-                          <th className="w-1/4 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Condition' : 'الشرط'}
-                          </th>
-                          <th className="flex-1 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Description' : 'التفاصيل'}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {(() => {
-                          const template = getConditionsTemplate(conditionsLanguage);
-                          return template.conditions.map((condition, index) => (
-                            <motion.tr
-                              key={index}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              transition={{ delay: index * 0.02 }}
-                              className="hover:bg-blue-50 transition"
-                            >
-                              <td className="px-3 py-3 text-center font-bold text-blue-600">{index + 1}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{condition.title}</td>
-                              <td className="px-4 py-3 text-gray-700 leading-relaxed">{condition.content}</td>
-                            </motion.tr>
-                          ));
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Signature Preview - Minimal */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {(() => {
-                    const template = getConditionsTemplate(conditionsLanguage);
-                    const dir = conditionsLanguage === 'ar' ? 'rtl' : 'ltr';
-                    return (
-                      <>
-                        <div className="flex flex-col items-center" style={{ direction: dir }}>
-                          <div className="h-16 w-full border-2 border-blue-900 rounded bg-white mb-3"></div>
-                          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">
-                            {template.clientSignatureLabel}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-center" style={{ direction: dir }}>
-                          <div className="h-16 w-full border-2 border-blue-900 rounded bg-white mb-3"></div>
-                          <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">
-                            {template.agencySignatureLabel}
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Info Alert - Compact */}
-                <div className="bg-blue-50 border-l-4 border-blue-600 p-3 mb-6 rounded">
-                  <p className="text-blue-900 text-sm">
-                    <span className="font-semibold">ℹ️ Info:</span>{' '}
-                    {conditionsLanguage === 'fr' 
-                      ? 'Modèle standard optimisé pour impression A4 sur une seule page.' 
-                      : 'نموذج قياسي محسّن للطباعة على صفحة A4 واحدة.'}
-                  </p>
-                </div>
-
-                {/* Action Buttons - Compact and Modern */}
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setShowConditionsModal(false)}
-                    className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-all text-sm"
-                  >
-                    {conditionsLanguage === 'fr' ? 'Fermer' : 'إغلاق'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const content = generateConditionsPrintHTML(conditionsLanguage);
-                      const printWindow = window.open('', '', 'height=800,width=900');
-                      if (printWindow) {
-                        printWindow.document.write(content);
-                        printWindow.document.close();
-                        setTimeout(() => {
-                          printWindow.print();
-                          printWindow.close();
-                        }, 250);
-                      }
+              {/* Content Area with Preview — same design as the contract interface */}
+              <div className="flex-1 overflow-auto bg-gradient-to-b from-gray-50 to-white p-8">
+                <div className="bg-white rounded-lg shadow-lg p-0 mx-auto" style={{ width: '210mm' }}>
+                  <iframe
+                    srcDoc={generateConditionsPrintHTML(conditionsLanguage)}
+                    style={{
+                      width: '100%',
+                      height: '600px',
+                      border: 'none',
+                      borderRadius: '0.5rem'
                     }}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
-                  >
-                    <Printer size={18} />
-                    <span>{conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}</span>
-                  </button>
+                    title="Conditions Preview"
+                  />
                 </div>
+              </div>
+
+              {/* Footer with Actions — same design as the contract interface */}
+              <div className="bg-gray-100 px-8 py-4 flex items-center justify-between border-t border-gray-200">
+                <button
+                  onClick={() => setShowConditionsModal(false)}
+                  className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg transition-all"
+                >
+                  {conditionsLanguage === 'fr' ? 'Fermer' : 'إغلاق'}
+                </button>
+                <button
+                  onClick={() => printHTMLContent(generateConditionsPrintHTML(conditionsLanguage))}
+                  className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                >
+                  <Printer size={18} />
+                  {conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -2938,7 +2861,7 @@ export const PersonalizationModal: React.FC<{
               </div>
               <div class="field">
                 <div class="field-label">${labels.mileage}</div>
-                <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 'N/A') + ' km')}</div>
+                <div class="field-value">${ltr((reservation?.departureInspection?.mileage || reservation?.car?.mileage || 'N/A') + ' km')}</div>
               </div>
               <div class="field">
                 <div class="field-label">${labels.kmPerDay}</div>

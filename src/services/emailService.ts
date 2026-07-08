@@ -1755,7 +1755,7 @@ export class EmailService {
           </div>
           <div class="field">
             <div class="field-label">📏 km</div>
-            <div class="field-value">${this.ltr((reservation.departureInspection?.mileage || 'N/A') + ' km')}</div>
+            <div class="field-value">${this.ltr((reservation.departureInspection?.mileage || reservation.car?.mileage || 'N/A') + ' km')}</div>
           </div>
         </div>
       </div>
