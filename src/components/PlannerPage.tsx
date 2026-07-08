@@ -2336,6 +2336,15 @@ export const PersonalizationModal: React.FC<{
     const scaleFactor = 1;
     const carImageUrl = reservation?.car?.images?.[0] || '';
 
+    // Contract number: a 4-digit, zero-padded number (0001, 0002, …) derived
+    // deterministically from the reservation id so the same contract always
+    // prints the same number. Defaults to 0001 when no id is available.
+    const contractNo = reservation?.id
+      ? (Array.from(String(reservation.id)).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 10000, 0) || 1)
+          .toString()
+          .padStart(4, '0')
+      : '0001';
+
     // Themed document font: traditional Naskh serif for Arabic (common on
     // Algerian official documents), formal serif for French.
     const docFontFamily = isFrench
@@ -2366,7 +2375,7 @@ export const PersonalizationModal: React.FC<{
         .page {
           width: 210mm;
           height: 297mm;
-          padding: ${hasSecondConductor ? '2mm' : '2.5mm'};
+          padding: ${hasSecondConductor ? '0.5mm 2mm 2mm' : '0.5mm 2.5mm 2.5mm'};
           margin: 0 auto;
           background: white;
           display: flex;
@@ -2377,7 +2386,7 @@ export const PersonalizationModal: React.FC<{
         }
         .header {
           border-bottom: 3px solid #1a3a8a;
-          padding-bottom: ${hasSecondConductor ? '5px' : '7px'};
+          padding-bottom: ${hasSecondConductor ? '1px' : '2px'};
           margin-bottom: ${hasSecondConductor ? '5px' : '7px'};
         }
         .header-row {
@@ -2402,12 +2411,12 @@ export const PersonalizationModal: React.FC<{
           object-fit: contain;
         }
         .agency-name {
-          font-size: ${hasSecondConductor ? '21px' : '24px'};
+          font-size: ${hasSecondConductor ? '27px' : '31px'};
           font-weight: 900;
           color: #1a3a8a;
           text-align: center;
           margin: 0 auto 2px;
-          line-height: 1.15;
+          line-height: 1.12;
           letter-spacing: ${isFrench ? '2px' : '0.5px'};
           text-transform: uppercase;
           font-family: ${docFontFamily};
@@ -2438,7 +2447,7 @@ export const PersonalizationModal: React.FC<{
           display: none;
         }
         .contract-title {
-          font-size: ${hasSecondConductor ? '19px' : '22px'};
+          font-size: ${hasSecondConductor ? '24px' : '28px'};
           font-weight: 900;
           color: #1a3a8a;
           text-align: center;
@@ -2780,9 +2789,9 @@ export const PersonalizationModal: React.FC<{
               <td class="it-label">${labels.contractDate}</td>
               <td class="it-value">${new Date().toLocaleDateString('en-US')}</td>
               <td class="it-label">${labels.contractNumber}</td>
-              <td class="it-value">#${reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : 'N/A'}</td>
+              <td class="it-value">${contractNo}</td>
               <td class="it-label">${labels.createdBy}</td>
-              <td class="it-value">${reservation?.createdByName || 'N/A'}</td>
+              <td class="it-value">${agencySettings?.name || 'N/A'}</td>
             </tr>
             <tr>
               <td class="it-section" colspan="6">${labels.rentalPeriod}</td>
