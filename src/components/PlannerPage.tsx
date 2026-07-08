@@ -226,21 +226,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   const updateReservation = async (updatedReservation: ReservationDetails) => {
     try {
-      // If finalising and there is a returnInspection, upsert it first
-      // so we never hit the unique_reservation_type_inspection constraint
-      if (
-        (updatedReservation.status === 'completed' || updatedReservation.status === 'terminated') &&
-        (updatedReservation as any).returnInspection
-      ) {
-        const ri = (updatedReservation as any).returnInspection;
-                await supabase
-          .from('inspections')
-          .delete()
-          .eq('reservation_id', updatedReservation.id)
-          .eq('type', 'return');
-
-      }
-
       await ReservationsService.updateReservation(updatedReservation.id, updatedReservation);
 
       const freshReservation = await ReservationsService.getReservationById(updatedReservation.id);
@@ -254,31 +239,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
       }
     } catch (err: any) {
       console.error('❌ Error updating reservation:', err);
-
-      // Graceful recovery for duplicate inspection key
-      if (
-        (err?.code === '23505' || err?.message?.includes('duplicate key')) &&
-        err?.message?.includes('unique_reservation_type_inspection')
-      ) {
-        try {
-          await supabase
-            .from('reservations')
-            .update({ status: updatedReservation.status })
-            .eq('id', updatedReservation.id);
-
-          const freshReservation = await ReservationsService.getReservationById(updatedReservation.id);
-          setReservations(prev =>
-            prev.map(res => res.id === freshReservation.id ? freshReservation : res)
-          );
-          if (selectedReservation?.id === freshReservation.id) {
-            setSelectedReservation(freshReservation);
-          }
-          return; // Status updated successfully, don't show error
-        } catch (recoveryErr) {
-          console.error('❌ Recovery failed:', recoveryErr);
-        }
-      }
-
       setError('Failed to update reservation');
     }
   };

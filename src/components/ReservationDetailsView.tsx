@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ReservationDetails, Payment, VehicleInspection, Agency } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, CreditCard, DollarSign, Printer, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
@@ -14,7 +14,7 @@ interface ReservationDetailsViewProps {
 }
 
 export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ lang, reservation, onBack, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'inspections' | 'payments' | 'financial'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'financial'>('overview');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -166,7 +166,6 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
         <div className="flex border-b border-saas-border">
           {[
             { id: 'overview', label: lang === 'fr' ? 'Aperçu' : 'نظرة عامة', icon: '👁️' },
-            { id: 'inspections', label: lang === 'fr' ? 'Inspections' : 'الفحوصات', icon: '🔍' },
             { id: 'payments', label: lang === 'fr' ? 'Paiements' : 'المدفوعات', icon: '💰' },
             { id: 'financial', label: lang === 'fr' ? 'Financier' : 'المالي', icon: '📊' },
           ].map((tab) => (
@@ -186,7 +185,6 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
 
         <div className="p-6">
           {activeTab === 'overview' && <OverviewTab lang={lang} reservation={reservation} />}
-          {activeTab === 'inspections' && <InspectionsTab lang={lang} reservation={reservation} />}
           {activeTab === 'payments' && <PaymentsTab lang={lang} reservation={reservation} onAddPayment={handleAddPayment} onDeletePayment={handleDeletePayment} onPrintPayment={handlePrintPayment} />}
           {activeTab === 'financial' && <FinancialTab lang={lang} reservation={reservation} />}
         </div>
@@ -322,297 +320,6 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
   </div>
 );
 
-// Inspections Tab Component
-const InspectionsTab: React.FC<{ lang: Language; reservation: ReservationDetails }> = ({ lang, reservation }) => {
-  const securityItems = reservation.departureInspection?.inspectionItems.filter(i => i.category === 'security') || [];
-  const equipmentItems = reservation.departureInspection?.inspectionItems.filter(i => i.category === 'equipment') || [];
-  const comfortItems = reservation.departureInspection?.inspectionItems.filter(i => i.category === 'comfort' || i.category === 'cleanliness') || [];
-
-  const returnSecurityItems = (reservation.returnInspection?.inspectionItems || reservation.departureInspection?.inspectionItems || []).filter(i => i.category === 'security');
-  const returnEquipmentItems = (reservation.returnInspection?.inspectionItems || reservation.departureInspection?.inspectionItems || []).filter(i => i.category === 'equipment');
-  const returnComfortItems = (reservation.returnInspection?.inspectionItems || reservation.departureInspection?.inspectionItems || []).filter(i => i.category === 'comfort' || i.category === 'cleanliness');
-
-  return (
-  <div className="space-y-6">
-    {/* Check-in */}
-    <div className="glass-card p-6 border border-saas-border">
-      <h3 className="text-xl font-black text-saas-text-main mb-4 flex items-center gap-2">
-        ✅ {lang === 'fr' ? 'Check-in (Mise en Circulation)' : 'الدخول (التداول)'}
-      </h3>
-      {reservation.departureInspection ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="font-bold text-blue-900">⛽ {lang === 'fr' ? 'Kilométrage' : 'العداد'}</p>
-              <p className="text-2xl font-black text-blue-700">{reservation.departureInspection.mileage.toLocaleString()} km</p>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="font-bold text-green-900">🛢️ {lang === 'fr' ? 'Carburant' : 'الوقود'}</p>
-              <p className="text-2xl font-black text-green-700">
-                {reservation.departureInspection.fuelLevel === 'full' ? 'PLEIN' :
-                 reservation.departureInspection.fuelLevel === 'half' ? '1/2' :
-                 reservation.departureInspection.fuelLevel === 'quarter' ? '1/4' :
-                 reservation.departureInspection.fuelLevel === 'eighth' ? '1/8' : 'VIDE'}
-              </p>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="font-bold text-purple-900">📍 {lang === 'fr' ? 'Localisation' : 'الموقع'}</p>
-              <p className="text-lg font-bold text-purple-700">{reservation.departureInspection.location}</p>
-            </div>
-            <div className="bg-orange-50 rounded-lg p-4">
-              <p className="font-bold text-orange-900">📅 {lang === 'fr' ? 'Date & Heure' : 'التاريخ والوقت'}</p>
-              <p className="text-lg font-bold text-orange-700">{reservation.departureInspection.date}</p>
-              <p className="text-sm text-orange-600">{reservation.departureInspection.time}</p>
-            </div>
-          {reservation.departureInspection.signature && (
-            <div className="bg-indigo-50 rounded-lg p-4">
-              <p className="font-bold text-indigo-900">✍️ {lang === 'fr' ? 'Signature' : 'التوقيع'}</p>
-              <div className="mt-2">
-                <img src={reservation.departureInspection.signature} alt="Client Signature" className="w-full h-16 object-contain border border-indigo-300 rounded" />
-              </div>
-            </div>
-          )}
-          </div>
-
-          {/* Photos Gallery */}
-          <div className="space-y-4">
-            {(reservation.departureInspection.exteriorPhotos && reservation.departureInspection.exteriorPhotos.length > 0) && (
-              <div>
-                <h4 className="font-bold text-saas-text-main mb-3">📸 {lang === 'fr' ? 'Photos Extérieures' : 'الصور الخارجية'}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {reservation.departureInspection.exteriorPhotos.map((photo, idx) => (
-                    <div key={`exterior-${idx}`} className="rounded-lg overflow-hidden border border-saas-border shadow-md">
-                      <img src={photo} alt={`Exterior ${idx + 1}`} className="w-full h-48 object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {(reservation.departureInspection.interiorPhotos && reservation.departureInspection.interiorPhotos.length > 0) && (
-              <div>
-                <h4 className="font-bold text-saas-text-main mb-3">🏎️ {lang === 'fr' ? 'Photos Intérieures' : 'الصور الداخلية'}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {reservation.departureInspection.interiorPhotos.map((photo, idx) => (
-                    <div key={`interior-${idx}`} className="rounded-lg overflow-hidden border border-saas-border shadow-md">
-                      <img src={photo} alt={`Interior ${idx + 1}`} className="w-full h-48 object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Inspection Items */}
-          <div className="space-y-6">
-            {/* Security Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">🛡️ {lang === 'fr' ? 'Sécurité' : 'الأمان'}</h4>
-              <div className="space-y-2">
-                {securityItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Equipment Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">🔧 {lang === 'fr' ? 'Équipements' : 'المعدات'}</h4>
-              <div className="space-y-2">
-                {equipmentItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Comfort & Cleanliness Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">✨ {lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة'}</h4>
-              <div className="space-y-2">
-                {comfortItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-saas-text-muted italic">{lang === 'fr' ? 'Aucune inspection de départ enregistrée' : 'لم يتم تسجيل فحص المغادرة'}</p>
-      )}
-    </div>
-
-    {/* Check-out */}
-    <div className="glass-card p-6 border border-saas-border">
-      <h3 className="text-xl font-black text-saas-text-main mb-4 flex items-center gap-2">
-        🔒 {lang === 'fr' ? 'Check-out (Clôture)' : 'الخروج (الإغلاق)'}
-      </h3>
-      {reservation.returnInspection ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="font-bold text-blue-900">⛽ {lang === 'fr' ? 'Kilométrage' : 'العداد'}</p>
-              <p className="text-2xl font-black text-blue-700">{reservation.returnInspection.mileage.toLocaleString()} km</p>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="font-bold text-green-900">📏 {lang === 'fr' ? 'Distance' : 'المسافة'}</p>
-              <p className="text-2xl font-black text-green-700">
-                {reservation.returnInspection.mileage - (reservation.departureInspection?.mileage || 0)} km
-              </p>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="font-bold text-purple-900">🛢️ {lang === 'fr' ? 'Carburant' : 'الوقود'}</p>
-              <p className="text-2xl font-black text-purple-700">
-                {reservation.returnInspection.fuelLevel === 'full' ? 'PLEIN' :
-                 reservation.returnInspection.fuelLevel === 'half' ? '1/2' :
-                 reservation.returnInspection.fuelLevel === 'quarter' ? '1/4' :
-                 reservation.returnInspection.fuelLevel === 'eighth' ? '1/8' : 'VIDE'}
-              </p>
-            </div>
-            <div className="bg-orange-50 rounded-lg p-4">
-              <p className="font-bold text-orange-900">📍 {lang === 'fr' ? 'Localisation' : 'الموقع'}</p>
-              <p className="text-lg font-bold text-orange-700">{reservation.returnInspection.location}</p>
-            </div>
-            {reservation.returnInspection.signature && (
-              <div className="bg-indigo-50 rounded-lg p-4">
-                <p className="font-bold text-indigo-900">✍️ {lang === 'fr' ? 'Signature' : 'التوقيع'}</p>
-                <div className="mt-2">
-                  <img src={reservation.returnInspection.signature} alt="Client Signature" className="w-full h-16 object-contain border border-indigo-300 rounded" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Photos Gallery */}
-          <div className="space-y-4">
-            {(reservation.returnInspection.exteriorPhotos && reservation.returnInspection.exteriorPhotos.length > 0) && (
-              <div>
-                <h4 className="font-bold text-saas-text-main mb-3">📸 {lang === 'fr' ? 'Photos Extérieures' : 'الصور الخارجية'}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {reservation.returnInspection.exteriorPhotos.map((photo, idx) => (
-                    <div key={`return-exterior-${idx}`} className="rounded-lg overflow-hidden border border-saas-border shadow-md">
-                      <img src={photo} alt={`Exterior ${idx + 1}`} className="w-full h-48 object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {(reservation.returnInspection.interiorPhotos && reservation.returnInspection.interiorPhotos.length > 0) && (
-              <div>
-                <h4 className="font-bold text-saas-text-main mb-3">🏎️ {lang === 'fr' ? 'Photos Intérieures' : 'الصور الداخلية'}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {reservation.returnInspection.interiorPhotos.map((photo, idx) => (
-                    <div key={`return-interior-${idx}`} className="rounded-lg overflow-hidden border border-saas-border shadow-md">
-                      <img src={photo} alt={`Interior ${idx + 1}`} className="w-full h-48 object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-indigo-50 rounded-lg p-4">
-              <p className="font-bold text-indigo-900">📅 {lang === 'fr' ? 'Date & Heure' : 'التاريخ والوقت'}</p>
-              <p className="text-lg font-bold text-indigo-700">{reservation.returnInspection.date}</p>
-              <p className="text-sm text-indigo-600">{reservation.returnInspection.time}</p>
-            </div>
-          </div>
-
-          {/* Inspection Items */}
-          <div className="space-y-6">
-            {/* Security Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">🛡️ {lang === 'fr' ? 'Sécurité' : 'الأمان'}</h4>
-              <div className="space-y-2">
-                {returnSecurityItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Equipment Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">🔧 {lang === 'fr' ? 'Équipements' : 'المعدات'}</h4>
-              <div className="space-y-2">
-                {returnEquipmentItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Comfort & Cleanliness Items */}
-            <div>
-              <h4 className="font-bold text-saas-text-main mb-3">✨ {lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة'}</h4>
-              <div className="space-y-2">
-                {returnComfortItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-saas-border">
-                    <span className="font-bold capitalize text-saas-text-main">
-                      {item.name}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {item.checked ? '✅' : '❌'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-saas-text-muted italic">{lang === 'fr' ? 'Aucune inspection de retour enregistrée' : 'لم يتم تسجيل فحص العودة'}</p>
-      )}
-    </div>
-  </div>
-);
-};
 // Payments Tab Component
 const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; onAddPayment: () => void; onDeletePayment: (id: string) => void; onPrintPayment: (payment: Payment) => void }> = ({ lang, reservation, onAddPayment, onDeletePayment, onPrintPayment }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -1046,104 +753,8 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
 };
 
 
-// reusable signature pad component
-const SignaturePad: React.FC<{ lang: Language; onSignatureChange: (signature: string) => void }> = ({ lang, onSignatureChange }) => {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = React.useState(false);
-  const [hasSignature, setHasSignature] = React.useState(false);
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    setIsDrawing(true);
-    ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      onSignatureChange(canvas.toDataURL());
-    }
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-    onSignatureChange('');
-  };
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, []);
-
-  return (
-    <div className="space-y-2">
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          className="w-full h-64 border border-indigo-300 rounded-lg cursor-crosshair bg-white"
-          style={{ touchAction: 'none' }}
-        />
-        {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center text-indigo-400">
-              <FileText className="w-6 h-6 mx-auto mb-1" />
-              <p className="text-xs font-bold">
-                {lang === 'fr' ? 'Signez ici' : 'وقع هنا'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="flex justify-between items-center">
-        <p className="text-xs text-indigo-700 font-bold">
-          {lang === 'fr' ? 'Signature numérique' : 'التوقيع الرقمي'}
-        </p>
-        <button
-          onClick={clearSignature}
-          className="text-red-600 hover:text-red-800 font-bold text-xs underline"
-        >
-          {lang === 'fr' ? 'Effacer' : 'مسح'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
 export const ActivationModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onActivate?: (reservation: ReservationDetails) => void }> = ({ lang, reservation, onClose, onActivate }) => {
-  const [mileage, setMileage] = useState(reservation.departureInspection?.mileage?.toString() || '');
+  const [mileage, setMileage] = useState(reservation.car.mileage?.toString() || '');
   const [location, setLocation] = useState(reservation.step1?.departureLocation || '');
   const [notes, setNotes] = useState('');
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -1316,18 +927,7 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
           <button
             onClick={async () => {
               try {
-                // Inspection/fuel data is no longer collected at activation —
-                // pass neutral defaults so the service/DB layer stays unchanged.
-                await ReservationsService.activateReservationWithInspection({
-                  reservationId: reservation.id,
-                  carId: reservation.car.id,
-                  mileage: parseInt(mileage),
-                  fuelLevel: 'full',
-                  location,
-                  notes,
-                  inspectionItems: [],
-                  departureAgencyId: reservation.step1?.departureAgency
-                });
+                await ReservationsService.activateReservation(reservation.id);
 
                 // Update car mileage (needed for maintenance/vidange alerts)
                 await supabase
@@ -1342,21 +942,7 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
                   ...reservation,
                   status: 'active' as const,
                   activatedAt: new Date().toISOString(),
-                  departureInspection: {
-                    id: `departure-${reservation.id}`,
-                    reservationId: reservation.id,
-                    type: 'departure' as const,
-                    mileage: parseInt(mileage),
-                    fuelLevel: 'full' as const,
-                    location,
-                    date: new Date().toLocaleDateString(),
-                    time: new Date().toLocaleTimeString(),
-                    interiorPhotos: [],
-                    exteriorPhotos: [],
-                    inspectionItems: [],
-                    notes,
-                    createdAt: new Date().toISOString()
-                  }
+                  car: { ...reservation.car, mileage: parseInt(mileage) },
                 };
 
                 onActivate?.(updatedReservation);
@@ -1383,13 +969,12 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
   const [returnTime, setReturnTime] = useState(reservation.step1.returnTime);
   const [excessMileage, setExcessMileage] = useState('');
   const [documentsRecovered, setDocumentsRecovered] = useState(true);
-  const [signature, setSignature] = useState('');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const totalDistance = returnMileage && reservation.departureInspection?.mileage
-    ? parseInt(returnMileage) - reservation.departureInspection.mileage
+  const totalDistance = returnMileage && reservation.car.mileage
+    ? parseInt(returnMileage) - reservation.car.mileage
     : 0;
 
   const totalFees = parseFloat(excessMileage) || 0;
@@ -1416,20 +1001,12 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
 
       console.log('🟢 Starting reservation completion for:', reservation.id);
 
-      // Fuel level and inspection checklist are no longer collected at
-      // completion — pass neutral defaults so the service/DB layer stays unchanged.
-      await ReservationsService.completeReservationWithInspection({
+      await ReservationsService.completeReservation({
         reservationId: reservation.id,
         carId: reservation.carId,
         returnMileage: parseInt(returnMileage),
-        returnFuelLevel: 'full',
-        returnLocation: reservation.step1.returnAgency || reservation.step1.departureAgency,
-        returnAgencyId: reservation.step1.returnAgency || reservation.step1.departureAgency,
         excessMileage: parseFloat(excessMileage) || 0,
-        missingFuel: 0,
-        signatureDataUrl: signature,
         notes: notes,
-        inspectionItems: [],
       });
 
       console.log('🟢 Reservation completion successful, updating car info...');
@@ -1454,22 +1031,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
         ...reservation,
         status: 'completed' as const,
         completedAt: new Date().toISOString(),
-        returnInspection: {
-          id: `return-${reservation.id}`,
-          reservationId: reservation.id,
-          type: 'return' as const,
-          mileage: parseInt(returnMileage),
-          fuelLevel: 'full' as const,
-          location: reservation.step1.returnAgency || reservation.step1.departureAgency,
-          date: returnDate,
-          time: returnTime,
-          interiorPhotos: [],
-          exteriorPhotos: [],
-          inspectionItems: [],
-          notes: notes,
-          signature: signature,
-          createdAt: new Date().toISOString()
-        },
+        car: { ...reservation.car, mileage: parseInt(returnMileage) },
         excessMileage: parseFloat(excessMileage) || 0,
         missingFuel: 0,
         additionalFees: totalFees,
@@ -1547,7 +1109,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
               </div>
               <div>
                 <p className="font-bold text-saas-text-main">{lang === 'fr' ? 'Kilométrage Actuel' : 'العداد الحالي'}</p>
-                <p className="text-saas-text-muted">{reservation.car.mileage.toLocaleString()} km</p>
+                <p className="text-saas-text-muted">{(reservation.car.mileage || 0).toLocaleString()} km</p>
               </div>
             </div>
           </div>
@@ -1564,7 +1126,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
                 </label>
                 <input
                   type="number"
-                  value={reservation.departureInspection?.mileage || ''}
+                  value={reservation.car.mileage || ''}
                   className="w-full p-3 border border-blue-200 rounded-lg bg-slate-100"
                   readOnly
                 />
@@ -1694,16 +1256,6 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
                 </label>
               </div>
             </div>
-          </div>
-
-          {/* Signature */}
-          <div className="bg-indigo-50 rounded-2xl p-6 border border-indigo-200">
-            <h4 className="text-lg font-black text-indigo-900 mb-4">
-              ✍️ {lang === 'fr' ? 'Signature du Client' : 'توقيع العميل'}
-            </h4>
-            <div className="max-w-xs mx-auto">
-            <SignaturePad lang={lang} onSignatureChange={setSignature} />
-          </div>
           </div>
 
           {/* Notes */}

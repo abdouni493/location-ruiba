@@ -273,7 +273,7 @@ export class ReservationsService {
         priceMonth: res.car.price_month,
         deposit: res.car.deposit,
         images: res.car.image_url ? [res.car.image_url] : [],
-        mileage: res.car.mileage,
+        mileage: res.car.mileage || 0,
         vin: res.car.vin,
       } : null,
       step1: {
@@ -486,7 +486,7 @@ export class ReservationsService {
         priceMonth: data.car.price_month,
         deposit: data.car.deposit,
         images: data.car.image_url ? [data.car.image_url] : [],
-        mileage: data.car.mileage,
+        mileage: data.car.mileage || 0,
         vin: data.car.vin,
       } : null,
       step1: {
@@ -724,125 +724,12 @@ export class ReservationsService {
     if (error) throw error;
   }
 
-  static async activateReservationWithInspection(data: {
-    reservationId: string;
-    carId: string;
-    mileage: number;
-    fuelLevel: 'full' | 'half' | 'quarter' | 'eighth' | 'empty';
-    location: string;
-    notes?: string;
-    signatureDataUrl?: string;
-    departurePhotos?: string[];
-    inspectionItems: any[];
-    departureAgencyId?: string;
-  }): Promise<void> {
-    // First activate the reservation
-    await this.activateReservation(data.reservationId);
-
-    // Check if departure inspection already exists for this reservation
-    try {
-      const { data: existingInspection, error } = await supabase
-        .from('vehicle_inspections')
-        .select('id')
-        .eq('reservation_id', data.reservationId)
-        .eq('type', 'departure')
-        .single();
-
-      if (existingInspection) {
-        // Inspection already exists, skip creation to avoid 409 conflict
-        console.log('Departure inspection already exists for this reservation');
-        return;
-      }
-    } catch (e) {
-      // No existing inspection, continue with creation
-      console.log('No existing departure inspection, creating new one');
-    }
-
-    // Upload signature if provided
-    let signatureUrl = '';
-    if (data.signatureDataUrl) {
-      const response = await fetch(data.signatureDataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `signature-departure-${data.reservationId}-${Date.now()}.png`, { type: 'image/png' });
-      signatureUrl = await this.uploadSignature(file, data.reservationId);
-    }
-
-    // Upload departure photos if provided
-    let photoUrls: string[] = [];
-    if (data.departurePhotos && data.departurePhotos.length > 0) {
-      for (let i = 0; i < data.departurePhotos.length; i++) {
-        const photoDataUrl = data.departurePhotos[i];
-        const response = await fetch(photoDataUrl);
-        const blob = await response.blob();
-        const file = new File([blob], `departure-photo-${data.reservationId}-${i}-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        const url = await this.uploadInspectionImage(file, data.reservationId, 'departure');
-        photoUrls.push(url);
-      }
-    }
-
-    // Update car mileage and fuel level
-    await supabase
-      .from('cars')
-      .update({
-        mileage: data.mileage,
-        energy: data.fuelLevel === 'full' ? 'Plein' : 
-                data.fuelLevel === 'half' ? '1/2' :
-                data.fuelLevel === 'quarter' ? '1/4' :
-                data.fuelLevel === 'eighth' ? '1/8' : 'Vide'
-      })
-      .eq('id', data.carId);
-
-    // Use agency ID from reservation, fall back to location if not provided
-    const agencyId = data.departureAgencyId || data.location || 'default-agency';
-
-    await this.createInspection({
-      reservationId: data.reservationId,
-      type: 'departure',
-      mileage: data.mileage,
-      fuelLevel: data.fuelLevel,
-      agencyId: agencyId,
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString(),
-      notes: data.notes,
-      exteriorFrontPhotoUrl: photoUrls.length > 0 ? photoUrls[0] : undefined,
-      interiorPhotoUrl: photoUrls.length > 1 ? photoUrls[1] : undefined,
-      otherPhotosUrls: photoUrls.length > 2 ? photoUrls.slice(2) : [],
-      clientSignatureUrl: signatureUrl,
-    });
-
-    // Save inspection items if provided
-    if (data.inspectionItems && data.inspectionItems.length > 0) {
-      const { data: inspection } = await supabase
-        .from('vehicle_inspections')
-        .select('id')
-        .eq('reservation_id', data.reservationId)
-        .eq('type', 'departure')
-        .single();
-
-      if (inspection) {
-        const responses = data.inspectionItems.map((item: any) => ({
-          inspection_id: inspection.id,
-          checklist_item_id: item.id,
-          status: !!item.checked,
-          note: item.note || null
-        }));
-        await supabase.from('inspection_responses').insert(responses);
-      }
-    }
-  }
-
-  static async completeReservationWithInspection(data: {
+  static async completeReservation(data: {
     reservationId: string;
     carId: string;
     returnMileage: number;
-    returnFuelLevel: 'full' | 'half' | 'quarter' | 'eighth' | 'empty';
-    returnLocation: string;
     excessMileage?: number;
-    missingFuel?: number;
-    signatureDataUrl?: string;
     notes?: string;
-    inspectionItems: any[];
-    returnAgencyId?: string;
   }): Promise<void> {
     try {
       console.log('📋 Starting completion process for reservation:', data.reservationId);
@@ -850,68 +737,6 @@ export class ReservationsService {
       // Validate inputs
       if (!data.reservationId || !data.carId || data.returnMileage === undefined) {
         throw new Error('Missing required fields: reservationId, carId, or returnMileage');
-      }
-
-      console.log('✅ Inputs validated');
-
-      // Upload signature if provided
-      let signatureUrl = '';
-      if (data.signatureDataUrl) {
-        try {
-          console.log('📸 Uploading signature...');
-          const response = await fetch(data.signatureDataUrl);
-          const blob = await response.blob();
-          const file = new File([blob], `signature-return-${data.reservationId}-${Date.now()}.png`, { type: 'image/png' });
-          signatureUrl = await this.uploadSignature(file, data.reservationId);
-          console.log('✅ Signature uploaded');
-        } catch (err) {
-          console.warn('⚠️ Signature upload failed (non-blocking):', err);
-        }
-      }
-
-      // Create the return inspection
-      console.log('🔍 Creating return inspection...');
-      const now = new Date();
-      // Format date as YYYY-MM-DD (PostgreSQL expects this format, not DD/MM/YYYY)
-      const dateString = now.toISOString().split('T')[0];
-      // Format time as HH:MM:SS
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const timeString = `${hours}:${minutes}:${seconds}`;
-      
-      const inspectionData = {
-        reservationId: data.reservationId,
-        type: 'return' as const,
-        mileage: data.returnMileage,
-        fuelLevel: data.returnFuelLevel,
-        agencyId: data.returnAgencyId || data.returnLocation,
-        date: dateString,
-        time: timeString,
-        notes: data.notes,
-        clientSignatureUrl: signatureUrl,
-      };
-
-      const { id: inspectionId } = await this.createInspection(inspectionData);
-      console.log('✅ Return inspection created:', inspectionId);
-
-      // Save inspection responses (checklist items) for return inspection
-      if (data.inspectionItems && data.inspectionItems.length > 0) {
-        try {
-          console.log('📝 Saving inspection responses...');
-          const responses = data.inspectionItems.map((item: any) => ({
-            inspection_id: inspectionId,
-            checklist_item_id: item.id,
-            status: !!item.checked,
-            note: item.note || null
-          }));
-          // Use upsert to avoid duplicates
-          const { DatabaseService } = await import('./DatabaseService');
-          await DatabaseService.upsertInspectionResponses(responses);
-          console.log('✅ Inspection responses saved');
-        } catch (err) {
-          console.warn('⚠️ Failed to save inspection responses (non-blocking):', err);
-        }
       }
 
       // Update the car's mileage
@@ -932,13 +757,11 @@ export class ReservationsService {
       const updateData: any = {
         status: 'completed',
         completed_at: new Date().toISOString(),
+        missing_fuel: 0,
       };
 
       if (data.excessMileage !== undefined) updateData.excess_mileage = data.excessMileage;
-      if (data.missingFuel !== undefined) updateData.missing_fuel = data.missingFuel;
       if (data.notes) updateData.notes = data.notes;
-
-      console.log('Update data:', updateData);
 
       const { error } = await supabase
         .from('reservations')
@@ -947,16 +770,12 @@ export class ReservationsService {
 
       if (error) {
         console.error('❌ Reservation update failed:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        console.error('Error details:', error);
         throw new Error(`Failed to complete reservation: ${error.message}`);
       }
 
       console.log('✅ Reservation completion successful');
     } catch (error: any) {
-      console.error('❌ Error in completeReservationWithInspection:', error);
-      console.error('Full error object:', JSON.stringify(error, null, 2));
+      console.error('❌ Error in completeReservation:', error);
       throw error;
     }
   }
@@ -1280,33 +1099,6 @@ export class ReservationsService {
 
     const fileExt = file.name.split('.').pop();
     const fileName = `inspection-${reservationId}-${photoType}-${Date.now()}.${fileExt}`;
-
-    const { data, error } = await supabase.storage
-      .from('inspection')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (error) throw error;
-
-    const { data: publicUrl } = supabase.storage
-      .from('inspection')
-      .getPublicUrl(data.path);
-
-    return publicUrl.publicUrl;
-  }
-
-  static async uploadSignature(
-    file: File,
-    reservationId: string
-  ): Promise<string> {
-    if (!file.type.startsWith('image/')) {
-      throw new Error('File must be an image');
-    }
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `signature-${reservationId}-${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
       .from('inspection')
