@@ -634,7 +634,6 @@ export class ReservationsService {
     notes: string;
     conditionsText?: string;
     tvaApplied: boolean;
-    tvaAmount: number;
     additionalFees: number;
     totalPrice: number;
     deposit: number;
@@ -670,7 +669,6 @@ export class ReservationsService {
     if (updates.notes !== undefined) updateData.notes = updates.notes;
     if (updates.conditionsText !== undefined) updateData.conditions_text = updates.conditionsText;
     if (updates.tvaApplied !== undefined) updateData.tva_applied = updates.tvaApplied;
-    if (updates.tvaAmount !== undefined) updateData.tva_amount = updates.tvaAmount;
     if (updates.additionalFees !== undefined) updateData.additional_fees = updates.additionalFees;
     if (updates.totalPrice !== undefined) updateData.total_price = updates.totalPrice;
     if (updates.deposit !== undefined) updateData.deposit = updates.deposit;
@@ -686,30 +684,38 @@ export class ReservationsService {
     if (updates.protectionAssuranceName !== undefined) updateData.protection_assurance_name = updates.protectionAssuranceName;
     if (updates.protectionAssurancePrice !== undefined) updateData.protection_assurance_price = updates.protectionAssurancePrice;
 
-    // Remove caution_amount_dzd from updateData if it exists and is invalid, as it may not exist in the schema yet
-    // The column should be added via migration first
-    try {
+    // Some optional columns (caution_amount_dzd, price_per_day, …) only exist once the
+    // matching migration has been applied. PostgREST answers with PGRST204 and names the
+    // offending column, so drop it and retry rather than losing the whole update.
+    const MAX_MISSING_COLUMN_RETRIES = 8;
+
+    for (let attempt = 0; ; attempt++) {
       const { error } = await supabase
         .from('reservations')
         .update(updateData)
         .eq('id', id);
 
-      if (error) {
-        // If the error is about caution_amount_dzd column not existing, retry without it
-        if (error.message && error.message.includes('caution_amount_dzd')) {
-          delete updateData.caution_amount_dzd;
-          const { error: retryError } = await supabase
-            .from('reservations')
-            .update(updateData)
-            .eq('id', id);
-          if (retryError) throw retryError;
-        } else {
-          throw error;
-        }
-      }
-    } catch (e) {
-      throw e;
+      if (!error) return;
+
+      const missingColumn = ReservationsService.getMissingColumn(error, updateData);
+      if (!missingColumn || attempt >= MAX_MISSING_COLUMN_RETRIES) throw error;
+
+      console.warn(`⚠️ reservations.${missingColumn} is missing from the schema — saving without it.`);
+      delete updateData[missingColumn];
+
+      if (Object.keys(updateData).length === 0) return;
     }
+  }
+
+  /**
+   * Reads the column name out of a PostgREST "schema cache" error (PGRST204) and returns it
+   * when we actually sent that column, so the caller can retry without it.
+   */
+  private static getMissingColumn(error: any, updateData: Record<string, any>): string | null {
+    if (error?.code !== 'PGRST204') return null;
+    const quoted = /'([^']+)' column/.exec(error?.message ?? '');
+    const column = quoted?.[1];
+    return column && column in updateData ? column : null;
   }
 
   static async activateReservation(id: string): Promise<void> {

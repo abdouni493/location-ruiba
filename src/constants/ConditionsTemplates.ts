@@ -205,6 +205,16 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   const dir = isArabic ? 'rtl' : 'ltr';
   const textAlign = isArabic ? 'right' : 'left';
 
+  /**
+   * The French wording is considerably longer than the Arabic one and used to spill onto a
+   * second A4 sheet. Both languages share one design; French simply renders it at a reduced
+   * scale (fonts + vertical rhythm) so the 17 conditions, the acceptance box and both
+   * signature boxes still fit on a single page. Horizontal gutters stay fixed so the two
+   * languages keep the same page frame.
+   */
+  const scale = isArabic ? 1 : 0.86;
+  const u = (n: number): string => `${Math.round(n * scale * 100) / 100}px`;
+
   const conditionsHTML = template.conditions
     .map(
       (condition, index) => `
@@ -249,54 +259,54 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .page {
       width: 794px;
       min-height: 1123px;
-      padding-bottom: 30px;
+      padding-bottom: ${u(30)};
       display: flex;
       flex-direction: column;
       background: white;
       border: 2px solid #003399;
     }
 
-    /* ── HEADER (÷1.2) ── */
+    /* ── HEADER ── */
     .header {
       background: linear-gradient(135deg, #003399 0%, #0047b2 100%);
       color: white;
-      padding: 18px 47px 15px;
+      padding: ${u(18)} 47px ${u(15)};
       text-align: center;
       flex-shrink: 0;
     }
 
     .header h1 {
-      font-size: 22px;
+      font-size: ${u(22)};
       font-weight: 800;
-      margin: 0 0 7px;
+      margin: 0 0 ${u(7)};
       letter-spacing: 0.3px;
     }
 
     .header p {
-      font-size: 12.5px;
+      font-size: ${u(12.5)};
       margin: 0;
       opacity: 0.88;
       font-style: italic;
       color: rgba(255,255,255,0.88);
     }
 
-    /* ── CONTENT (÷1.2) ──
+    /* ── CONTENT ──
        No flex-grow: the content takes only the height it needs so the
        acceptance box + signatures sit directly beneath the conditions
        instead of being pushed to the bottom of the A4 page. */
     .content {
-      padding: 15px 47px 0;
+      padding: ${u(15)} 47px 0;
     }
 
     /* ── CONDITION ROWS ── */
     .condition-item {
-      padding: 7px 0;
+      padding: ${u(7)} 0;
       border-bottom: 1px solid #eef0f7;
     }
     .condition-item:last-child { border-bottom: none; }
 
     .condition-text {
-      font-size: 12.5px;
+      font-size: ${u(12.5)};
       color: #111;
       font-weight: 600;
       line-height: 1.55;
@@ -311,12 +321,12 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     /* ── ACCEPTANCE ── */
     .acceptance {
-      margin: 12px 47px 0;
-      padding: 9px 12px;
+      margin: ${u(12)} 47px 0;
+      padding: ${u(9)} ${u(12)};
       background: #f0f4ff;
       border-radius: 5px;
       border: 1px solid #b8ccee;
-      font-size: 12.5px;
+      font-size: ${u(12.5)};
       color: #003399;
       font-weight: 700;
       text-align: ${textAlign};
@@ -324,7 +334,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     /* ── SIGNATURES: simple empty rectangles ── */
     .signatures-section {
-      margin: 16px 47px 0;
+      margin: ${u(16)} 47px 0;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 27px;
@@ -335,16 +345,16 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .signature-box {
       border: 2px solid #003399;
       border-radius: 4px;
-      height: 100px;
+      height: ${u(100)};
       background: #fff;
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding-top: 8px;
+      padding-top: ${u(8)};
     }
 
     .signature-label {
-      font-size: 12.5px;
+      font-size: ${u(12.5)};
       font-weight: 700;
       color: #003399;
       letter-spacing: 0.2px;
@@ -352,10 +362,10 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     .print-date {
       text-align: center;
-      font-size: 9px;
+      font-size: ${u(9)};
       color: #888;
-      margin: 13px 47px 0;
-      padding-top: 10px;
+      margin: ${u(13)} 47px 0;
+      padding-top: ${u(10)};
       border-top: 1px solid #dde3f5;
     }
 

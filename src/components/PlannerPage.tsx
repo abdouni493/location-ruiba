@@ -2343,8 +2343,16 @@ export const PersonalizationModal: React.FC<{
         ];
 
     const hasSecondConductor = !!secondConductor;
-    const baseFontSize = hasSecondConductor ? 17 : 18;
-    const scaleFactor = 1;
+
+    /**
+     * There is a single contract design. Adding a secondary driver inserts one more section,
+     * so the whole template is rendered at a uniform reduced scale instead of a different,
+     * cramped layout — same proportions, same page frame, same signature placement, just
+     * smaller, so it still prints on one A4 sheet.
+     */
+    const contentScale = hasSecondConductor ? 0.87 : 1;
+    const px = (n: number): string => `${Math.round(n * contentScale * 100) / 100}px`;
+    const baseFontSize = 18;
     const carImageUrl = reservation?.car?.images?.[0] || '';
 
     // Contract number: a 4-digit, zero-padded number (0001, 0002, …) derived
@@ -2375,18 +2383,16 @@ export const PersonalizationModal: React.FC<{
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
-          line-height: ${hasSecondConductor ? '1.4' : '1.45'};
+          line-height: 1.45;
           color: #222;
           background: white;
           direction: ${textDir};
-          font-size: ${baseFontSize}px;
-          transform: scale(${scaleFactor});
-          transform-origin: top center;
+          font-size: ${px(baseFontSize)};
         }
         .page {
           width: 210mm;
           height: 297mm;
-          padding: ${hasSecondConductor ? '0.5mm 2mm 2mm' : '0.5mm 2.5mm 2.5mm'};
+          padding: 0.5mm 2.5mm 2.5mm;
           margin: 0 auto;
           background: white;
           display: flex;
@@ -2397,8 +2403,8 @@ export const PersonalizationModal: React.FC<{
         }
         .header {
           border-bottom: 3px solid #1a3a8a;
-          padding-bottom: ${hasSecondConductor ? '1px' : '2px'};
-          margin-bottom: ${hasSecondConductor ? '5px' : '7px'};
+          padding-bottom: ${px(2)};
+          margin-bottom: ${px(7)};
         }
         .header-row {
           display: grid;
@@ -2415,14 +2421,14 @@ export const PersonalizationModal: React.FC<{
         }
         .logo {
           display: block;
-          max-width: ${hasSecondConductor ? '275px' : '320px'};
-          max-height: ${hasSecondConductor ? '132px' : '156px'};
+          max-width: ${px(320)};
+          max-height: ${px(156)};
           width: auto;
           height: auto;
           object-fit: contain;
         }
         .agency-name {
-          font-size: ${hasSecondConductor ? '27px' : '31px'};
+          font-size: ${px(31)};
           font-weight: 900;
           color: #1a3a8a;
           text-align: center;
@@ -2433,7 +2439,7 @@ export const PersonalizationModal: React.FC<{
           font-family: ${docFontFamily};
         }
         .agency-contact {
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          font-size: ${px(14)};
           color: #1f2937;
           font-weight: 700;
           line-height: 1.5;
@@ -2458,7 +2464,7 @@ export const PersonalizationModal: React.FC<{
           display: none;
         }
         .contract-title {
-          font-size: ${hasSecondConductor ? '24px' : '28px'};
+          font-size: ${px(28)};
           font-weight: 900;
           color: #1a3a8a;
           text-align: center;
@@ -2469,14 +2475,14 @@ export const PersonalizationModal: React.FC<{
         .info-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: ${hasSecondConductor ? '4px' : '6px'};
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          margin-bottom: ${px(6)};
+          font-size: ${px(13)};
           border: 1.5px solid #1a3a8a;
           border-radius: 6px;
           overflow: hidden;
         }
         .info-table td {
-          padding: ${hasSecondConductor ? '4px 7px' : '5px 9px'};
+          padding: ${px(5)} ${px(9)};
           border: 1px solid #dbe2f0;
         }
         .info-table .it-label {
@@ -2496,14 +2502,14 @@ export const PersonalizationModal: React.FC<{
           font-weight: 700;
           text-align: center;
           letter-spacing: 0.6px;
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
-          padding-top: ${hasSecondConductor ? '3px' : '4px'};
-          padding-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          font-size: ${px(13)};
+          padding-top: ${px(4)};
+          padding-bottom: ${px(4)};
         }
         .section {
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          margin-bottom: ${px(4)};
           page-break-inside: avoid;
-          padding: ${hasSecondConductor ? '3px 4px' : '4px 5px'};
+          padding: ${px(4)} ${px(5)};
           border-radius: 4px;
           border: 1px solid #e5e7eb;
         }
@@ -2532,7 +2538,7 @@ export const PersonalizationModal: React.FC<{
           border: 1px solid #cbd5e1;
         }
         .statement-text {
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          font-size: ${px(14)};
           line-height: 1.6;
           color: #1f2937;
           text-align: justify;
@@ -2546,35 +2552,35 @@ export const PersonalizationModal: React.FC<{
           color: #b91c1c !important;
         }
         .special-list {
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          font-size: ${px(13)};
           line-height: 1.55;
           color: #b91c1c;
         }
         .special-item {
-          margin: 2px 0;
+          margin: ${px(2)} 0;
         }
         /* Bottom grid: statement + special conditions on the left, car image on the right */
         .bottom-grid {
           display: grid;
           grid-template-columns: 1.65fr 1fr;
-          gap: ${hasSecondConductor ? '6px' : '8px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          gap: ${px(8)};
+          margin-bottom: ${px(4)};
           align-items: stretch;
         }
         .bottom-left {
           display: flex;
           flex-direction: column;
-          gap: ${hasSecondConductor ? '6px' : '8px'};
+          gap: ${px(8)};
           min-width: 0;
         }
         .bottom-left .section {
           margin-bottom: 0;
         }
         .statement-section.compact {
-          padding: ${hasSecondConductor ? '3px 5px' : '4px 6px'};
+          padding: ${px(4)} ${px(6)};
         }
         .statement-section.compact .statement-text {
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
+          font-size: ${px(12)};
           line-height: 1.4;
         }
         .car-photo-box {
@@ -2591,118 +2597,118 @@ export const PersonalizationModal: React.FC<{
         .car-photo {
           width: 100%;
           height: 100%;
-          max-height: ${hasSecondConductor ? '190px' : '220px'};
+          max-height: ${px(220)};
           object-fit: cover;
           border-radius: 4px;
         }
         .car-photo-label {
-          font-size: ${hasSecondConductor ? '10px' : '11px'};
+          font-size: ${px(11)};
           font-weight: 600;
           color: #64748b;
           text-align: center;
         }
         .section-title {
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          font-size: ${px(13)};
           font-weight: 700;
           background-color: transparent;
-          padding: ${hasSecondConductor ? '2px 0' : '3px 0'};
-          margin-bottom: ${hasSecondConductor ? '2px' : '3px'};
+          padding: ${px(3)} 0;
+          margin-bottom: ${px(3)};
           color: #1a3a8a;
           letter-spacing: 0.3px;
         }
         .section-content {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '6px 5px' : '9px 7px'};
-          font-size: ${hasSecondConductor ? '14px' : '15px'};
+          gap: ${px(9)} ${px(7)};
+          font-size: ${px(15)};
         }
         .section-content.full {
           grid-template-columns: 1fr 1fr 1fr;
         }
         .field {
-          padding: ${hasSecondConductor ? '1px 0' : '2px 0'};
+          padding: ${px(2)} 0;
           border-bottom: 0.5px solid #ddd;
         }
         .field-label {
           font-weight: 600;
           color: #1a3a8a;
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          font-size: ${px(14)};
         }
         .field-value {
           color: #444;
           margin-top: 0px;
-          font-size: ${hasSecondConductor ? '14px' : '15px'};
+          font-size: ${px(15)};
         }
         .pricing-table {
           width: 100%;
-          margin-bottom: 4px;
-          font-size: 15px;
+          margin-bottom: ${px(4)};
+          font-size: ${px(15)};
           border-collapse: collapse;
         }
         .pricing-row {
           display: flex;
           justify-content: space-between;
-          padding: ${hasSecondConductor ? '1px 0' : '2px 0'};
+          padding: ${px(2)} 0;
           border-bottom: 0.5px solid #ddd;
         }
         .pricing-row.total {
           border-top: 1px solid #222;
           font-weight: 600;
           margin-top: 1px;
-          padding-top: ${hasSecondConductor ? '1px' : '2px'};
+          padding-top: ${px(2)};
         }
         .pricing-row.grand-total {
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
+          font-size: ${px(14)};
           font-weight: 700;
           color: #1a3a8a;
           border-top: 2px solid #1a3a8a;
-          padding-top: ${hasSecondConductor ? '1px' : '2px'};
+          padding-top: ${px(2)};
         }
         .conditions-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '4px 5px' : '5px 6px'};
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
+          gap: ${px(5)} ${px(6)};
+          font-size: ${px(14)};
+          margin-bottom: ${px(4)};
         }
         .condition-item {
           display: flex;
           align-items: center;
           gap: 3px;
-          line-height: ${hasSecondConductor ? '1.2' : '1.25'};
+          line-height: 1.25;
         }
         .checkbox {
-          width: 12px;
-          height: 12px;
+          width: ${px(12)};
+          height: ${px(12)};
           border: 1px solid #999;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 8px;
+          font-size: ${px(8)};
           flex-shrink: 0;
         }
         .signatures {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '13px' : '20px'};
-          margin-top: ${hasSecondConductor ? '6px' : '8px'};
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-          padding-top: ${hasSecondConductor ? '3px' : '4px'};
+          gap: ${px(20)};
+          margin-top: ${px(8)};
+          font-size: ${px(14)};
+          padding-top: ${px(4)};
         }
         .signature-block {
           text-align: center;
         }
         .signature-line {
           border-top: 1px solid #333;
-          margin-bottom: ${hasSecondConductor ? '1px' : '2px'};
-          height: ${hasSecondConductor ? '20px' : '25px'};
+          margin-bottom: ${px(2)};
+          height: ${px(25)};
         }
         .signature-label {
           font-weight: 600;
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
+          font-size: ${px(13)};
         }
         .date-sig {
-          font-size: ${hasSecondConductor ? '9px' : '10px'};
+          font-size: ${px(10)};
           color: #666;
           margin-top: 1px;
         }
@@ -2740,21 +2746,20 @@ export const PersonalizationModal: React.FC<{
             overflow: hidden;
           }
           
-          /* Perfect centering with margins.
-             When a second conductor is added the contract is taller, so we
-             don't scale it up (and drop the forced min-height) to keep every
-             detail on a single A4 page. */
+          /* Perfect centering with margins. The page geometry is identical whether or not
+             there is a second conductor — only the content inside is scaled (contentScale),
+             so both variants fill the same sheet and print at the same size. */
           .page {
             margin: 0 auto;
-            padding: ${hasSecondConductor ? '8mm' : '10mm'};
+            padding: 10mm;
             width: 190mm;
-            min-height: ${hasSecondConductor ? 'auto' : '277mm'};
+            min-height: 277mm;
             height: auto;
             box-sizing: border-box;
             border: 2px solid black;
             left: 0;
             right: 0;
-            transform: scale(${hasSecondConductor ? '1' : '1.15'});
+            transform: scale(1.15);
             transform-origin: top center;
           }
           
@@ -2819,7 +2824,7 @@ export const PersonalizationModal: React.FC<{
         </table>
 
         <!-- Driver & Vehicle Info (2 columns) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: ${px(10)};">
           <!-- Driver Info -->
           <div class="section driver-section">
             <div class="section-title">${labels.driverInfo}</div>
@@ -2946,7 +2951,7 @@ export const PersonalizationModal: React.FC<{
         </div>
 
         <!-- Signatures -->
-        <div class="signatures" style="margin-top: ${hasSecondConductor ? '6px' : '8px'}; padding-top: 10px; border-top: 2px solid #1a3a8a;">
+        <div class="signatures" style="padding-top: ${px(10)}; border-top: 2px solid #1a3a8a;">
           <div class="signature-block">
             <div class="signature-line"></div>
             <div class="signature-label">${labels.clientSignature}</div>

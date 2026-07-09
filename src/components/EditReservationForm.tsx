@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ReservationDetails } from '../types';
-import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, Camera, User, Plus, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, User, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Step1DatesLocations, Step2VehicleSelection, Step3DepartureInspection, Step4ClientSelection, Step5AdditionalServices, Step6FinalPricing } from './CreateReservationForm';
-import { DatabaseService } from '../services/DatabaseService';
+import { Step1DatesLocations, Step2VehicleSelection, Step4ClientSelection, Step5AdditionalServices, Step6FinalPricing } from './CreateReservationForm';
 import { ReservationsService } from '../services/ReservationsService';
-import { uploadInspectionImage } from '../services/uploadInspectionImage';
 
 interface EditReservationFormProps {
   lang: Language;
@@ -17,9 +15,10 @@ interface EditReservationFormProps {
 }
 
 export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, reservation, onBack, onUpdate, agencies, isLoadingAgencies }) => {
-  // If status is accepted and inspection mode, start at step 3
-  const isInspectionMode = reservation.status === 'accepted';
-  const [currentStep, setCurrentStep] = useState(isInspectionMode ? 3 : 1);
+  // An "accepted" reservation is being confirmed: only services and pricing are editable,
+  // and saving moves it to "confirmed".
+  const isConfirmFlow = reservation.status === 'accepted';
+  const [currentStep, setCurrentStep] = useState(isConfirmFlow ? 5 : 1);
   // agencies and isLoadingAgencies are passed in as props now
   const [formData, setFormData] = useState<Partial<ReservationDetails>>({
     id: reservation.id,
@@ -57,9 +56,6 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       completeAddress: reservation.client.completeAddress,
       scannedDocuments: reservation.client.scannedDocuments,
       photo: reservation.client.profilePhoto,
-    },
-    step3: {
-      departureInspection: reservation.departureInspection
     },
     step4: {
       selectedClient: reservation.client
@@ -208,20 +204,22 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
     }
   }, []); // Only run once on mount
 
-  const steps = isInspectionMode
+  const steps = isConfirmFlow
     ? [
-        { id: 3, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' },
         { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
         { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
       ]
     : [
         { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
         { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
-        { id: 3, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' },
         { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
         { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
         { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
       ];
+
+  const currentIndex = steps.findIndex(s => s.id === currentStep);
+  const isFirstStep = currentIndex === 0;
+  const isLastStep = currentIndex === steps.length - 1;
 
   useEffect(() => {
     // Check if form data has changed from original reservation
@@ -230,21 +228,11 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
   }, [formData, reservation]);
 
   const handleNext = () => {
-    if (isInspectionMode) {
-      if (currentStep === 3) setCurrentStep(5);
-      else if (currentStep === 5) setCurrentStep(6);
-    } else {
-      if (currentStep < 6) setCurrentStep(currentStep + 1);
-    }
+    if (!isLastStep) setCurrentStep(steps[currentIndex + 1].id);
   };
 
   const handlePrevious = () => {
-    if (isInspectionMode) {
-      if (currentStep === 5) setCurrentStep(3);
-      else if (currentStep === 6) setCurrentStep(5);
-    } else {
-      if (currentStep > 1) setCurrentStep(currentStep - 1);
-    }
+    if (!isFirstStep) setCurrentStep(steps[currentIndex - 1].id);
   };
 
   const handleSave = async () => {
@@ -368,8 +356,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         advancePayment: newAdvancePayment,
         remainingPayment: newRemainingPayment,
         notes: formData.step6?.paymentNotes || formData.notes,
+        // Only the TVA flag is persisted; the TVA amount is already folded into totalPrice.
         tvaApplied: formData.step6?.tvaApplied || formData.tvaApplied,
-        tvaAmount: formData.step6?.tvaAmount,
         additionalFees: formData.step6?.additionalFees || formData.additionalFees,
         totalPrice: newTotalPrice,
         
@@ -390,8 +378,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
             : 0
           : 0,
         
-        // If in inspection mode (accepted), set status to confirmed
-        ...(isInspectionMode ? { status: 'confirmed' } : {})
+        // Confirming an accepted reservation
+        ...(isConfirmFlow ? { status: 'confirmed' } : {})
       };
 
       console.log('📤 UPDATE DATA TO SAVE:', JSON.stringify(updateData, null, 2));
@@ -430,109 +418,6 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       await ReservationsService.updateReservationServices(reservation.id, services);
       console.log('✅ Services updated successfully');
 
-      // Save/update departure inspection if present
-      const inspection = formData.step3?.departureInspection;
-      if (inspection) {
-        try {
-          console.log('🔍 Updating inspection...');
-          // Determine agency_id from inspection location
-          let agencyId = reservation.step1.departureAgency || reservation.step1.returnAgency || '';
-          if (inspection.location) {
-            // Find agency by name-city match
-            const agencies = await DatabaseService.getAgencies();
-            const matchingAgency = agencies.find((agency: any) => 
-              `${agency.name} - ${agency.city}` === inspection.location
-            );
-            if (matchingAgency) {
-              agencyId = matchingAgency.id;
-            }
-          }
-
-          // If inspection has a DB id (uuid) attempt update, else create
-          const isDbId = inspection.id && !inspection.id.toString().startsWith('inspection');
-          if (isDbId) {
-            await DatabaseService.updateVehicleInspection(inspection.id, {
-              mileage: inspection.mileage || 0,
-              fuel_level: inspection.fuelLevel || 'full',
-              agency_id: agencyId,
-              exterior_front_photo: inspection.exteriorPhotos?.[0] || null,
-              exterior_rear_photo: inspection.exteriorPhotos?.[1] || null,
-              interior_photo: inspection.interiorPhotos?.[0] || null,
-              other_photos: inspection.other_photos || inspection.otherPhotos || [],
-              client_signature: inspection.signature || inspection.client_signature || null,
-              notes: inspection.notes || null,
-              date: inspection.date,
-              time: inspection.time
-            });
-
-            // Upsert responses for ALL checklist items (preserve unchecked as false)
-            const responses = (inspection.inspectionItems || []).map((it: any) => ({
-              inspection_id: inspection.id,
-              checklist_item_id: it.id,
-              status: !!it.checked,
-              note: it.note || null
-            }));
-            if (responses.length > 0) await DatabaseService.upsertInspectionResponses(responses);
-
-            // also update car mileage on edit
-            if (inspection.mileage && inspection.mileage > 0) {
-              await DatabaseService.updateCar(reservation.carId, {
-                mileage: inspection.mileage
-              });
-            }
-          } else {
-            // Create new inspection
-            const created = await DatabaseService.createVehicleInspection({
-              reservation_id: reservation.id,
-              type: 'departure',
-              mileage: inspection.mileage || 0,
-              fuel_level: inspection.fuelLevel || 'full',
-              agency_id: agencyId,
-              exterior_front_photo: inspection.exteriorPhotos?.[0] || null,
-              exterior_rear_photo: inspection.exteriorPhotos?.[1] || null,
-              interior_photo: inspection.interiorPhotos?.[0] || null,
-              other_photos: inspection.other_photos || inspection.otherPhotos || [],
-              client_signature: inspection.signature || inspection.client_signature || null,
-              notes: inspection.notes || null,
-              date: inspection.date || new Date().toISOString().split('T')[0],
-              time: inspection.time || new Date().toTimeString().split(' ')[0]
-            });
-
-            // update local formData with new inspection id so future saves update instead of insert
-            setFormData(prev => ({
-              ...prev,
-              step3: {
-                ...prev.step3,
-                departureInspection: {
-                  ...(prev.step3?.departureInspection || {}),
-                  id: created.id
-                }
-              }
-            }));
-
-            // After creating inspection, upsert responses for all checklist items
-            const responses = (inspection.inspectionItems || []).map((it: any) => ({
-              inspection_id: created.id,
-              checklist_item_id: it.id,
-              status: !!it.checked,
-              note: it.note || null
-            }));
-            if (responses.length > 0) await DatabaseService.upsertInspectionResponses(responses);
-
-            // update car mileage after creating new inspection
-            if (inspection.mileage && inspection.mileage > 0) {
-              await DatabaseService.updateCar(reservation.carId, {
-                mileage: inspection.mileage
-              });
-            }
-          }
-          console.log('✅ Inspection updated successfully');
-        } catch (err) {
-          console.error('Error saving inspection during edit:', err);
-          throw err; // propagate so outer catch prevents closing the modal
-        }
-      }
-
       // Update local reservation data for immediate UI feedback
       const updatedReservation = {
         ...reservation,
@@ -542,7 +427,6 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         step1: formData.step1,
         step4: formData.step4,
         step6: formData.step6,
-        step3: formData.step3,
         step5: formData.step5
       };
 
@@ -606,7 +490,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
               ✏️ {lang === 'fr' ? 'Modifier Réservation' : 'تعديل الحجز'}
             </h2>
             <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
-              #{reservation.id} • {lang === 'fr' ? 'Étape' : 'الخطوة'} {currentStep} {lang === 'fr' ? 'sur' : 'من'} 6
+              #{reservation.id} • {lang === 'fr' ? 'Étape' : 'الخطوة'} {currentIndex + 1} {lang === 'fr' ? 'sur' : 'من'} {steps.length}
             </p>
           </div>
         </div>
@@ -628,14 +512,14 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
           {steps.map((step, idx) => (
             <div key={step.id} className="flex flex-col items-center flex-1">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg mb-2 transition-colors ${
-                idx < steps.findIndex(s => s.id === currentStep) ? 'bg-green-500 text-white' :
-                idx === steps.findIndex(s => s.id === currentStep) ? 'bg-blue-500 text-white' :
+                idx < currentIndex ? 'bg-green-500 text-white' :
+                idx === currentIndex ? 'bg-blue-500 text-white' :
                 'bg-slate-200 text-slate-500'
               }`}>
-                {idx < steps.findIndex(s => s.id === currentStep) ? <CheckCircle className="w-6 h-6" /> : step.icon}
+                {idx < currentIndex ? <CheckCircle className="w-6 h-6" /> : step.icon}
               </div>
               <p className={`text-xs font-bold text-center ${
-                idx <= steps.findIndex(s => s.id === currentStep) ? 'text-slate-900' : 'text-slate-500'
+                idx <= currentIndex ? 'text-slate-900' : 'text-slate-500'
               }`}>
                 {step.title}
               </p>
@@ -645,7 +529,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         <div className="w-full bg-slate-200 rounded-full h-2">
           <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${isInspectionMode ? ((steps.findIndex(s => s.id === currentStep) + 1) / steps.length) * 100 : (currentStep / 6) * 100}%` }}
+            style={{ width: `${((currentIndex + 1) / steps.length) * 100}%` }}
           />
         </div>
       </div>
@@ -661,12 +545,11 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
           className="bg-white rounded-2xl shadow-lg border border-slate-200"
         >
           <div className="p-8">
-            {(!isInspectionMode && currentStep === 1) && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} />}
-            {(!isInspectionMode && currentStep === 2) && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
-            {(isInspectionMode ? currentStep === 3 : currentStep === 3) && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
-            {(!isInspectionMode && currentStep === 4) && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
-            {(isInspectionMode ? currentStep === 5 : currentStep === 5) && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-            {(isInspectionMode ? currentStep === 6 : currentStep === 6) && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} />}
+            {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 5 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 6 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} />}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -675,9 +558,9 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       <div className="flex justify-between">
         <button
           onClick={handlePrevious}
-          disabled={currentStep === 1}
+          disabled={isFirstStep}
           className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
-            currentStep === 1
+            isFirstStep
               ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
               : 'bg-slate-600 hover:bg-slate-700 text-white'
           }`}
@@ -697,7 +580,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
             </button>
           )}
 
-          {currentStep < 6 ? (
+          {!isLastStep ? (
             <button
               onClick={handleNext}
               className="btn-saas-primary"
@@ -929,358 +812,6 @@ const EditStep2VehicleSelection: React.FC<{
     </div>
   </div>
 );
-
-const EditStep3DepartureInspection: React.FC<{
-  lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
-  agencies: any[];
-  isLoadingAgencies: boolean;
-}> = ({ lang, formData, setFormData, agencies, isLoadingAgencies }) => {
-  const [mileage, setMileage] = useState('');
-  const [fuelLevel, setFuelLevel] = useState<'full' | 'half' | 'quarter' | 'eighth' | 'empty'>('full');
-  const [selectedInspectionLocation, setSelectedInspectionLocation] = useState('');
-  const [notes, setNotes] = useState('');
-  const [photos, setPhotos] = useState<any[]>([]);
-  const [signature, setSignature] = useState('');
-  const initializeRef = React.useRef(false);
-
-  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: string) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const inspectionId = formData.step3?.departureInspection?.id;
-      const result = await uploadInspectionImage(file, inspectionId, type);
-      if (result.success && result.url) {
-        const url = result.url;
-        setPhotos(prev => [...prev, { url, type, file }]);
-        // also update formData arrays
-        setFormData(prev => {
-          const dep = prev.step3?.departureInspection || {};
-          const interior = (dep.interiorPhotos || []).slice();
-          const exterior = (dep.exteriorPhotos || []).slice();
-          const other = (dep.other_photos || dep.otherPhotos || []).slice();
-          if (type === 'interior') interior.push(url);
-          else if (type === 'exterior_front' || type === 'exterior_rear' || type === 'exterior') exterior.push(url);
-          else other.push(url);
-          return {
-            ...prev,
-            step3: {
-              ...prev.step3,
-              departureInspection: {
-                ...(prev.step3?.departureInspection || {}),
-                interiorPhotos: interior,
-                exteriorPhotos: exterior,
-                other_photos: other,
-                otherPhotos: other
-              }
-            }
-          };
-        });
-      } else {
-        alert(result.error || (lang === 'fr' ? 'Erreur lors du téléchargement' : 'خطأ في التحميل'));
-      }
-    } catch (err) {
-      console.error('Error uploading photo in edit form:', err);
-      alert(lang === 'fr' ? 'Erreur lors du téléchargement' : 'خطأ في التحميل');
-    }
-  };
-
-  const removePhoto = (index: number) => {
-    setPhotos(prev => {
-      const next = prev.filter((_, i) => i !== index);
-      // rebuild arrays in formData from remaining photos
-      setFormData(prevForm => {
-        const dep = prevForm.step3?.departureInspection || {};
-        const remaining = next.map(p => p.url);
-        return {
-          ...prevForm,
-          step3: {
-            ...prevForm.step3,
-            departureInspection: {
-              ...(prevForm.step3?.departureInspection || {}),
-              interiorPhotos: next.filter(p => p.type === 'interior').map(p => p.url),
-              exteriorPhotos: next.filter(p => p.type === 'exterior').map(p => p.url),
-              other_photos: next.filter(p => p.type === 'other').map(p => p.url),
-              otherPhotos: next.filter(p => p.type === 'other').map(p => p.url),
-            }
-          }
-        };
-      });
-      return next;
-    });
-  };
-
-  // Initialize from existing inspection data - only on first load
-  useEffect(() => {
-    const inspection = formData.step3?.departureInspection;
-    if (inspection && !initializeRef.current) {
-      initializeRef.current = true;
-      setMileage(inspection.mileage?.toString() || '');
-      setFuelLevel(inspection.fuelLevel || 'full');
-      setSelectedInspectionLocation(inspection.location || '');
-      setNotes(inspection.notes || '');
-      setSignature(inspection.signature || inspection.client_signature || '');
-      // Collect all photo types into a single photos array with type tags
-      const combined: any[] = [];
-      if (inspection.interiorPhotos && inspection.interiorPhotos.length) {
-        combined.push(...inspection.interiorPhotos.map((url: string) => ({ url, type: 'interior' })));
-      }
-      if (inspection.exteriorPhotos && inspection.exteriorPhotos.length) {
-        combined.push(...inspection.exteriorPhotos.map((url: string) => ({ url, type: 'exterior' })));
-      }
-      if (inspection.other_photos && inspection.other_photos.length) {
-        combined.push(...inspection.other_photos.map((url: string) => ({ url, type: 'other' })));
-      }
-      if (inspection.otherPhotos && inspection.otherPhotos.length) {
-        combined.push(...inspection.otherPhotos.map((url: string) => ({ url, type: 'other' })));
-      }
-      setPhotos(combined);
-
-      // Merge with master checklist items so UI shows all checklist entries with correct checked state
-      (async () => {
-        try {
-          const checklist = await ReservationsService.getChecklistItems();
-          // map existing responses by checklist id
-          const respMap: Record<string, any> = {};
-          (inspection.inspectionItems || []).forEach((r: any) => {
-            respMap[r.id] = r;
-          });
-          const merged = checklist.map((item: any) => ({
-            id: item.id,
-            name: item.item_name,
-            category: item.category === 'securite' ? 'security' : item.category === 'equipements' ? 'equipment' : item.category === 'confort' ? 'comfort' : 'cleanliness',
-            checked: !!(respMap[item.id] && respMap[item.id].status),
-            note: respMap[item.id]?.note || ''
-          }));
-
-          // set into formData so save uses full checklist
-          setFormData(prev => ({
-            ...prev,
-            step3: {
-              ...prev.step3,
-              departureInspection: {
-                ...(prev.step3?.departureInspection || {}),
-                inspectionItems: merged
-              }
-            }
-          }));
-        } catch (err) {
-          console.error('Failed to load checklist items for merge:', err);
-        }
-      })();
-    }
-  }, []);
-
-  // Update formData when individual values change
-  const updateInspectionData = React.useCallback(() => {
-    const inspectionData = {
-      id: formData.step3?.departureInspection?.id || `inspection_${Date.now()}`,
-      reservationId: formData.id || '',
-      type: 'departure' as const,
-      mileage: parseInt(mileage) || 0,
-      fuelLevel,
-      location: selectedInspectionLocation,
-      date: formData.step3?.departureInspection?.date || new Date().toISOString().split('T')[0],
-      time: formData.step3?.departureInspection?.time || new Date().toTimeString().split(' ')[0],
-      interiorPhotos: photos.filter(p => p.type === 'interior').map(p => p.url),
-      exteriorPhotos: photos.filter(p => p.type.includes('exterior')).map(p => p.url),
-      inspectionItems: formData.step3?.departureInspection?.inspectionItems || [],
-      notes,
-      signature,
-      client_signature: signature, // always sync to DB field
-      createdAt: formData.step3?.departureInspection?.createdAt || new Date().toISOString()
-    };
-
-    setFormData(prev => ({
-      ...prev,
-      step3: {
-        ...prev.step3,
-        departureInspection: inspectionData
-      }
-    }));
-  }, [mileage, fuelLevel, selectedInspectionLocation, notes, signature, photos, formData.step3?.departureInspection?.id, formData.step3?.departureInspection?.date, formData.step3?.departureInspection?.time, formData.step3?.departureInspection?.inspectionItems, formData.step3?.departureInspection?.createdAt, formData.id, setFormData]);
-
-  // Debounced update on changes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      updateInspectionData();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [mileage, fuelLevel, selectedInspectionLocation, notes, signature, photos, updateInspectionData]);
-
-  return (
-    <div className="space-y-8">
-      <h3 className="text-2xl font-black text-slate-900">
-        🔍 {lang === 'fr' ? 'Modifier Inspection Départ' : 'Edit Departure Inspection'}
-      </h3>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Basic Inspection Info */}
-        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-          <h4 className="text-lg font-black text-slate-900 mb-4">
-            📊 {lang === 'fr' ? 'Informations de Base' : 'Basic Information'}
-          </h4>
-          <div className="space-y-4">
-            <div>
-              <label className="block font-bold text-slate-900 mb-2">
-                ⛽ {lang === 'fr' ? 'Kilométrage au Départ' : 'Departure Mileage'}
-              </label>
-              <input
-                type="number"
-                value={mileage}
-                onChange={(e) => setMileage(e.target.value)}
-                className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="0"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-900 mb-3">
-                ⛽ {lang === 'fr' ? 'Niveau de Carburant' : 'Fuel Level'}
-              </label>
-              <div className="grid grid-cols-5 gap-2">
-                {[
-                  { value: 'full', label: 'PLEIN' },
-                  { value: 'half', label: '1/2' },
-                  { value: 'quarter', label: '1/4' },
-                  { value: 'eighth', label: '1/8' },
-                  { value: 'empty', label: 'VIDE' }
-                ].map((level) => (
-                  <button
-                    key={level.value}
-                    onClick={() => setFuelLevel(level.value as any)}
-                    className={`p-2 text-xs border rounded-lg font-bold transition-colors ${
-                      fuelLevel === level.value
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {level.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-900 mb-2">
-                📍 {lang === 'fr' ? 'Lieu d\'Inspection' : 'Inspection Location'}
-              </label>
-              <select
-                value={selectedInspectionLocation}
-                onChange={(e) => setSelectedInspectionLocation(e.target.value)}
-                className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isLoadingAgencies}
-              >
-                <option value="">
-                  {isLoadingAgencies 
-                    ? (lang === 'fr' ? 'Chargement...' : 'Loading...') 
-                    : (lang === 'fr' ? 'Sélectionner une agence...' : 'Select an agency...')
-                  }
-                </option>
-                {agencies.map((agency) => (
-                  <option key={agency.id} value={`${agency.name} - ${agency.city}`}>
-                    {agency.name} - {agency.city}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-          <h4 className="text-lg font-black text-slate-900 mb-4">
-            📝 {lang === 'fr' ? 'Notes' : 'Notes'}
-          </h4>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={4}
-            placeholder={lang === 'fr' ? 'Notes sur l\'inspection...' : 'Inspection notes...'}
-          />
-        </div>
-
-        {/* Photos and Signature */}
-        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-          <h4 className="text-lg font-black text-slate-900 mb-4">
-            📸 {lang === 'fr' ? 'Photos & Signature' : 'Photos & Signature'}
-          </h4>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-slate-600 mb-2">
-                {lang === 'fr' ? 'Photos téléchargées:' : 'Uploaded photos:'} {photos.length}
-              </p>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                {/* Upload buttons */}
-                {[
-                  { label: 'Extérieur Avant', type: 'exterior_front' },
-                  { label: 'Intérieur', type: 'interior' },
-                  { label: 'Extérieur Arrière', type: 'exterior_rear' },
-                  { label: 'Autres', type: 'other' }
-                ].map((item) => (
-                  <div key={item.type} className="relative">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handlePhotoUpload(e, item.type)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <div className="aspect-square border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center hover:bg-slate-50 transition-colors">
-                      <Camera className="w-8 h-8 text-slate-500 mb-2" />
-                      <span className="text-sm text-slate-700 font-bold text-center">{lang === 'fr' ? item.label : item.label}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Render photo thumbnails with resolved URLs */}
-              {photos.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
-                  {photos.map((photo, idx) => {
-                    const resolveUrl = (u?: string) => {
-                      if (!u) return u;
-                      if (u.startsWith('http')) return u;
-                      const base = import.meta.env.VITE_SUPABASE_URL || '';
-                      if (!base) return u;
-                      if (u.startsWith('/')) return `${base}${u}`;
-                      if (u.includes('/storage/v1')) return `${base}${u}`;
-                      if (u.includes('inspection')) return `${base}/storage/v1/object/public/${u.replace(/^\\+/, '')}`;
-                      return `${base}/storage/v1/object/public/inspection/${u}`;
-                    };
-
-                    const src = resolveUrl(photo.url);
-                    return (
-                      <div key={idx} className="relative group">
-                        <img src={src} alt={`Photo ${idx + 1}`} className="w-full aspect-square object-cover rounded-lg border border-slate-200" />
-                        <button
-                          onClick={() => removePhoto(idx)}
-                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {signature && (
-                <div>
-                  <p className="text-sm font-bold text-slate-900 mb-2">
-                    ✍️ {lang === 'fr' ? 'Signature client' : 'Client signature'}
-                  </p>
-                  <img src={signature} alt="Signature" className="w-full h-16 object-contain border border-slate-300 rounded" />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const EditStep4ClientSelection: React.FC<{
   lang: Language;
