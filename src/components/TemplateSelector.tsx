@@ -121,7 +121,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
             <div className="template-info">
               <span className="template-name">{template.name}</span>
               {template.is_default && <span className="badge badge-primary">Default</span>}
-              {template.template.has_conditions && (
+              {template.has_conditions && (
                 <span className="badge badge-info">+ Conditions</span>
               )}
             </div>

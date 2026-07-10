@@ -409,10 +409,19 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
       !isSearching ||
       (reservation.client.firstName || '').toLowerCase().includes(q) ||
       (reservation.client.lastName || '').toLowerCase().includes(q) ||
+      (`${reservation.client.firstName || ''} ${reservation.client.lastName || ''}`).toLowerCase().includes(q) ||
       (reservation.car.brand || '').toLowerCase().includes(q) ||
       (reservation.car.model || '').toLowerCase().includes(q) ||
       (reservation.car.registration || '').toLowerCase().includes(q) ||
-      (reservation.client.phone || '').toLowerCase().includes(q);
+      (reservation.client.phone || '').toLowerCase().includes(q) ||
+      (reservation.id || '').toString().toLowerCase().includes(q);
+
+    // Hide completed ("Terminé") reservations from the default planner view.
+    // They only surface when the user actively searches (client name / phone /
+    // reservation id) or explicitly filters by the "Terminé" status.
+    if (reservation.status === 'completed' && !isSearching && filterStatus !== 'completed') {
+      return false;
+    }
 
     const matchesFilter = filterStatus === 'all' || reservation.status === filterStatus;
 
