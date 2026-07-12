@@ -2,32 +2,47 @@
 --  AUTO LOCATION — Full Supabase schema (database + storage buckets + auth + RLS)
 -- -----------------------------------------------------------------------------
 --  Run this ONCE in the Supabase SQL Editor of your project
---  (Dashboard → SQL Editor → New query → paste → Run).
+--  (Dashboard → SQL Editor → New query → paste the WHOLE file → Run).
+--
+--  This file is IDEMPOTENT: it is safe to run on a brand-new project AND on a
+--  project that already has an older version of the schema (every table gets an
+--  "add column if not exists" safety net in section 11).
 --
 --  What it creates:
---    1. All application tables (cars, clients, reservations, workers, …)
+--    1. All application tables (cars, clients, reservations, inspections,
+--       workers, expenses, website, document templates, …)
 --    2. One dedicated STORAGE BUCKET per image kind
 --         cars • clients • worker • inspection • website
 --       The DB stores the public URL of each uploaded image; the file itself
 --       lives in its bucket and is served from there.
 --    3. Auth wiring:
---         - Admin account is created from the Login page (supabase.auth.signUp)
---         - Workers are created from the Team (Équipe) interface and are also
---           stored in Supabase Auth (auth.users) so each one logs in with his
---           own email + password.
+--         - profiles (1 row per auth user) + auto-create trigger
+--         - Workers are created from the Team (Équipe) interface through
+--           admin_create_worker(), which makes a REAL, EMAIL-CONFIRMED
+--           Supabase Auth user, so each worker logs in with his own
+--           email + password (Login.tsx → signInWithPassword, with the
+--           login_worker() RPC as a legacy fallback).
 --    4. Per-worker permissions: which INTERFACES a worker may open, and which
 --       ACTION BUTTONS he may use inside each interface (worker_permissions).
 --    5. Row-Level Security, storage policies, RPCs and the admin_count view the
---       front-end already calls.
+--       front-end calls.
 --
---  The column names match exactly what src/services/DatabaseService.ts and the
---  upload*.ts services read/write, so no front-end change is required to run.
+--  The column names match exactly what the front-end reads/writes:
+--    src/services/DatabaseService.ts   src/services/ReservationsService.ts
+--    src/services/carService.ts        src/services/expenseService.ts
+--    src/services/TemplateService.ts   src/services/DocumentTemplateService.ts
+--    src/services/upload*.ts           src/components/*.tsx
+--  so no front-end change is required to run.
 -- =============================================================================
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 0. EXTENSIONS
 -- ─────────────────────────────────────────────────────────────────────────────
-create extension if not exists pgcrypto;      -- gen_random_uuid(), crypt(), gen_salt()
+-- On Supabase, pgcrypto lives in the `extensions` schema. Every SECURITY DEFINER
+-- function that calls crypt()/gen_salt() below therefore sets
+-- `search_path = public, …, extensions` so those functions resolve.
+create extension if not exists pgcrypto with schema extensions;
 
 -- Generic "touch updated_at" trigger function (reused by several tables)
 create or replace function public.set_updated_at()
@@ -57,27 +72,28 @@ on conflict (name) do nothing;
 
 -- 1.2 profiles — 1 row per Supabase Auth user (admin OR worker) ────────────────
 --     role = the role NAME. role = 'admin' means full access.
+--     agency_id is read by DocumentRenderer.tsx / DocumentTemplateEditor.tsx.
 create table if not exists public.profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
   username   text,
   full_name  text,
   role       text not null default 'worker',
   avatar     text,
-  agency_id  text,                       -- used by DocumentRenderer / templates
+  agency_id  text,
   is_active  boolean not null default true,
   created_at timestamptz not null default now()
 );
 
 -- 1.3 Auto-create a profile whenever a new auth user is created.
---     The very first user (the admin created from the Login page) becomes 'admin';
---     everyone after that defaults to 'worker' unless a role is passed in metadata.
+--     The very first user ever becomes 'admin'; everyone after that defaults to
+--     'worker' unless a role is passed in the sign-up metadata.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 declare
-  v_role text;
+  v_role     text;
   v_is_first boolean;
 begin
   select count(*) = 0 into v_is_first from public.profiles;
@@ -93,7 +109,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'username'),
     v_role
   )
-  on conflict (id) do nothing;   -- Login.tsx also inserts; ignore the duplicate
+  on conflict (id) do nothing;
 
   return new;
 end $$;
@@ -103,8 +119,8 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- 1.4 admin_count — the Login page reads this to know if an admin already exists
---     (.from('admin_count').select('count').single()).
+-- 1.4 admin_count — how many admins exist (read by the login page logic;
+--     also typed in src/supabase.ts).
 create or replace view public.admin_count as
   select count(*)::int as count
   from public.profiles
@@ -124,7 +140,7 @@ create table if not exists public.agencies (
   created_at timestamptz not null default now()
 );
 
--- 2.2 Cars ──────────────────────────────────────────────────────────────────--
+-- 2.2 Cars ────────────────────────────────────────────────────────────────────
 --     image_url  = primary photo (public URL from the "cars" bucket, read path)
 --     images     = optional gallery of public URLs from the same bucket
 create table if not exists public.cars (
@@ -143,11 +159,11 @@ create table if not exists public.cars (
   price_week          numeric,
   price_month         numeric,
   deposit             numeric,
-  image_url           text,               -- ← public URL of the uploaded car image
-  images              text[] default '{}',-- ← extra gallery URLs (same bucket)
+  image_url           text,                -- ← public URL of the uploaded car image
+  images              text[] default '{}', -- ← extra gallery URLs (same bucket)
   mileage             int default 0,
-  fuel_level          text,
-  status              text default 'disponible',   -- only 'maintenance' is set manually
+  fuel_level          text,                -- full|half|quarter|eighth|empty
+  status              text default 'disponible',  -- only 'maintenance' is set manually
   is_hidden_from_site boolean not null default false,
   created_at          timestamptz not null default now()
 );
@@ -168,25 +184,25 @@ create table if not exists public.clients (
   license_expiration_date   date,
   license_delivery_date     date,
   license_delivery_place    text,
-  document_type             text,
+  document_type             text,          -- id_card|passport|none
   document_number           text,
   document_delivery_date    date,
   document_expiration_date  date,
   document_delivery_address text,
   wilaya                    text,
   complete_address          text,
-  profile_photo             text,          -- ← "clients" bucket URL
-  scanned_documents         text[] default '{}', -- ← "clients" bucket URLs
+  profile_photo             text,                 -- ← "clients" bucket URL
+  scanned_documents         text[] default '{}',  -- ← "clients" bucket URLs
   agency_id                 text,
   created_at                timestamptz not null default now()
 );
 
 -- 2.4 Workers (HR record) + link to their Supabase Auth account ───────────────
---     user_id     = auth.users.id  (so the worker logs in with his own account)
---     type        = 'admin' | 'worker' | 'driver'
+--     user_id       = auth.users.id (the worker logs in with his own account)
+--     type          = 'admin' | 'worker' | 'driver'
 --     profile_photo = public URL from the "worker" bucket
---     password    = legacy plaintext column kept only for the login_worker()
---                   fallback; real auth uses auth.users (see admin_create_worker).
+--     password      = legacy column kept only for the login_worker() fallback;
+--                     real auth uses auth.users (see admin_create_worker).
 create table if not exists public.workers (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid references auth.users(id) on delete set null,
@@ -195,10 +211,10 @@ create table if not exists public.workers (
   phone         text,
   email         text,
   address       text,
-  profile_photo text,                       -- ← "worker" bucket URL
+  profile_photo text,                      -- ← "worker" bucket URL
   type          text not null default 'worker',
   role_id       uuid references public.roles(id) on delete set null,
-  payment_type  text,                        -- 'daily' | 'monthly'
+  payment_type  text,                      -- 'daily' | 'monthly'
   base_salary   numeric,
   username      text,
   password      text,
@@ -245,10 +261,9 @@ create table if not exists public.worker_payments (
 --     One row per (worker, interface). interface_id matches SIDEBAR_ITEMS[].id
 --     (dashboard, planner, reservations, services, vehicles, maintenance,
 --      clients, agencies, team, expenses, car-gains, reports, config).
---     actions  = the allowed button ids inside that interface, from
---     INTERFACE_ACTIONS (e.g. {'view','create','edit','delete','print',...}).
---     A worker sees ONLY the interfaces he has a row for, and inside each
---     interface only the buttons listed in `actions`.
+--     actions = the allowed button ids inside that interface, from
+--     INTERFACE_ACTIONS in src/constants.ts (view, create, edit, delete, print…).
+--     Written by admin_create_worker() / set_worker_permissions().
 create table if not exists public.worker_permissions (
   id           uuid primary key default gen_random_uuid(),
   worker_id    uuid not null references public.workers(id) on delete cascade,
@@ -273,7 +288,7 @@ create table if not exists public.services (
   created_at   timestamptz not null default now()
 );
 
--- Protection-insurance packs ("assurances de protection") + reusable items ─────
+-- Protection-insurance packs ("assurances de protection") + reusable items ────
 create table if not exists public.protection_assurance_items (
   id            uuid primary key default gen_random_uuid(),
   item_name     text not null,
@@ -307,34 +322,41 @@ create table if not exists public.store_expenses (
   created_at timestamptz not null default now()
 );
 
+-- vehicle_expenses: the *_filter_changed flags are written by
+-- expenseService.addVehicleExpense() / updateVehicleExpense() and read by
+-- maintenanceService (vidange follow-up).
 create table if not exists public.vehicle_expenses (
-  id              uuid primary key default gen_random_uuid(),
-  car_id          uuid references public.cars(id) on delete cascade,
-  type            text,                    -- vidange|assurance|controle|chaine|autre
-  cost            numeric not null default 0,
-  date            date not null default current_date,
-  note            text,
-  current_mileage int,
-  next_vidange_km int,
-  expiration_date date,
-  expense_name    text,
-  created_at      timestamptz not null default now()
+  id                  uuid primary key default gen_random_uuid(),
+  car_id              uuid references public.cars(id) on delete cascade,
+  type                text,                 -- vidange|assurance|controle|chaine|autre
+  cost                numeric not null default 0,
+  date                date not null default current_date,
+  note                text,
+  current_mileage     int,
+  next_vidange_km     int,
+  expiration_date     date,
+  expense_name        text,
+  oil_filter_changed  boolean not null default false,
+  air_filter_changed  boolean not null default false,
+  fuel_filter_changed boolean not null default false,
+  ac_filter_changed   boolean not null default false,
+  created_at          timestamptz not null default now()
 );
 
 create table if not exists public.maintenance_alerts (
-  id                  uuid primary key default gen_random_uuid(),
-  car_id              uuid references public.cars(id) on delete cascade,
-  car_info            text,
-  type                text,
-  title               text,
-  message             text,
-  severity            text default 'medium',
-  due_date            date,
-  is_expired          boolean default false,
-  days_until_due      int,
-  current_mileage     int,
+  id                   uuid primary key default gen_random_uuid(),
+  car_id               uuid references public.cars(id) on delete cascade,
+  car_info             text,
+  type                 text,
+  title                text,
+  message              text,
+  severity             text default 'medium',
+  due_date             date,
+  is_expired           boolean default false,
+  days_until_due       int,
+  current_mileage      int,
   next_service_mileage int,
-  created_at          timestamptz not null default now()
+  created_at           timestamptz not null default now()
 );
 
 
@@ -342,61 +364,69 @@ create table if not exists public.maintenance_alerts (
 -- 4. RESERVATIONS / PAYMENTS / INSPECTIONS
 -- ═════════════════════════════════════════════════════════════════════════════
 
+-- status: pending | accepted | confirmed | active | completed | cancelled
+-- conditions_text = the rental conditions snapshot (ReservationsService reads
+--                   res.conditions_text and writes updateData.conditions_text).
 create table if not exists public.reservations (
-  id                        uuid primary key default gen_random_uuid(),
-  client_id                 uuid references public.clients(id) on delete set null,
-  car_id                    uuid references public.cars(id)    on delete set null,
-  departure_date            date,
-  departure_time            text,
-  departure_agency_id       text,
-  return_date               date,
-  return_time               text,
-  return_agency_id          text,
-  price_per_day             numeric,               -- snapshot du tarif au moment de la résa
-  price_week                numeric,
-  price_month               numeric,
-  total_days                int,
-  total_price               numeric not null default 0,
-  additional_fees           numeric default 0,
-  deposit                   numeric default 0,
-  caution_amount_dzd        numeric,
-  caution_currency          text default 'DZD',    -- 'DZD' | 'EUR'
-  euro_rate                 numeric,
-  assurance_enabled         boolean default false, -- ancienne assurance en %
-  assurance_percentage      numeric,
-  discount_amount           numeric default 0,
-  discount_type             text default 'fixed',
-  advance_payment           numeric default 0,
-  remaining_payment         numeric,
-  tva_applied               boolean default false,
-  excess_mileage            numeric,
-  missing_fuel              numeric,
-  notes                     text,
-  conditions                text,
-  status                    text not null default 'pending',
-  protection_assurance_id   uuid,
+  id                         uuid primary key default gen_random_uuid(),
+  client_id                  uuid references public.clients(id) on delete set null,
+  car_id                     uuid references public.cars(id)    on delete set null,
+  departure_date             date,
+  departure_time             text,
+  departure_agency_id        text,
+  return_date                date,
+  return_time                text,
+  return_agency_id           text,
+  price_per_day              numeric,             -- snapshot du tarif au moment de la résa
+  price_week                 numeric,
+  price_month                numeric,
+  total_days                 int,
+  total_price                numeric not null default 0,
+  additional_fees            numeric default 0,
+  deposit                    numeric default 0,
+  caution_amount_dzd         numeric,
+  caution_currency           text default 'DZD',  -- 'DZD' | 'EUR'
+  euro_rate                  numeric,
+  assurance_enabled          boolean default false,  -- ancienne assurance en %
+  assurance_percentage       numeric,
+  discount_amount            numeric default 0,
+  discount_type              text default 'fixed',   -- 'percentage' | 'fixed'
+  advance_payment            numeric default 0,
+  remaining_payment          numeric,
+  tva_applied                boolean default false,
+  excess_mileage             numeric,
+  missing_fuel               numeric,
+  notes                      text,
+  conditions                 text,
+  conditions_text            text,
+  status                     text not null default 'pending',
+  protection_assurance_id    uuid,
   protection_assurance_name  text,
   protection_assurance_price numeric,
-  created_by                uuid,
-  created_by_name           text,
-  activated_at              timestamptz,
-  completed_at              timestamptz,
-  created_at                timestamptz not null default now(),
-  -- Named FK so PostgREST embed hint works:
-  -- protection_assurances!reservations_protection_assurance_fkey
+  created_by                 uuid,
+  created_by_name            text,
+  activated_at               timestamptz,
+  completed_at               timestamptz,
+  created_at                 timestamptz not null default now(),
+  -- Named FK so the PostgREST embed hint used by the front-end works:
+  --   protection_assurances!reservations_protection_assurance_fkey
   constraint reservations_protection_assurance_fkey
     foreign key (protection_assurance_id)
     references public.protection_assurances(id) on delete set null
 );
 
 -- Extra services attached to a reservation ────────────────────────────────────
+-- driver_id / driver_caution are written by ReservationsService.addService()
+-- and updateReservationServices() when the extra service is a chauffeur.
 create table if not exists public.reservation_services (
   id             uuid primary key default gen_random_uuid(),
   reservation_id uuid not null references public.reservations(id) on delete cascade,
-  category       text,
+  category       text,          -- decoration|equipment|insurance|service|driver
   service_name   text,
   description    text,
   price          numeric not null default 0,
+  driver_id      uuid references public.workers(id) on delete set null,
+  driver_caution numeric default 0,
   created_at     timestamptz not null default now()
 );
 
@@ -423,26 +453,27 @@ create table if not exists public.inspection_checklist_items (
 
 -- Vehicle inspection (departure / return) ─────────────────────────────────────
 --     All *_photo / other_photos columns store public URLs from the
---     "inspection" bucket.
+--     "inspection" bucket. client_signature stores the signature image URL.
 create table if not exists public.vehicle_inspections (
-  id                    uuid primary key default gen_random_uuid(),
-  reservation_id        uuid not null references public.reservations(id) on delete cascade,
-  type                  text not null,            -- 'departure' | 'return'
-  mileage               int,
-  fuel_level            text,
-  agency_id             text,
-  exterior_front_photo  text,                     -- ← "inspection" bucket URL
-  exterior_rear_photo   text,                     -- ← "inspection" bucket URL
-  interior_photo        text,                     -- ← "inspection" bucket URL
-  other_photos          text[] default '{}',      -- ← "inspection" bucket URLs
-  client_signature      text,
-  notes                 text,
-  date                  date,
-  time                  text,
-  created_at            timestamptz not null default now(),
-  unique (reservation_id, type)                   -- upsert onConflict target
+  id                   uuid primary key default gen_random_uuid(),
+  reservation_id       uuid not null references public.reservations(id) on delete cascade,
+  type                 text not null,            -- 'departure' | 'return'
+  mileage              int,
+  fuel_level           text,                     -- full|half|quarter|eighth|empty
+  agency_id            text,
+  exterior_front_photo text,                     -- ← "inspection" bucket URL
+  exterior_rear_photo  text,                     -- ← "inspection" bucket URL
+  interior_photo       text,                     -- ← "inspection" bucket URL
+  other_photos         text[] default '{}',      -- ← "inspection" bucket URLs
+  client_signature     text,
+  notes                text,
+  date                 date,
+  time                 text,
+  created_at           timestamptz not null default now(),
+  unique (reservation_id, type)                  -- upsert onConflict target
 );
 
+-- One answer per checklist item, per inspection ───────────────────────────────
 create table if not exists public.inspection_responses (
   id                uuid primary key default gen_random_uuid(),
   inspection_id     uuid not null references public.vehicle_inspections(id) on delete cascade,
@@ -450,7 +481,7 @@ create table if not exists public.inspection_responses (
   status            boolean not null default false,
   note              text,
   created_at        timestamptz not null default now(),
-  unique (inspection_id, checklist_item_id)       -- upsert onConflict target
+  unique (inspection_id, checklist_item_id)      -- upsert onConflict target
 );
 
 
@@ -474,7 +505,7 @@ create table if not exists public.special_offers (
   created_at     timestamptz not null default now()
 );
 
--- Legacy "offers" table (deprecated, kept so old code paths don't 404) ─────────
+-- Legacy "offers" table (deprecated, kept so old code paths don't 404) ────────
 create table if not exists public.offers (
   id         uuid primary key default gen_random_uuid(),
   car_id     uuid references public.cars(id) on delete cascade,
@@ -506,7 +537,7 @@ create table if not exists public.website_settings (
   bank_number        text,
   address            text,
   phone              text,
-  landing_background text,                   -- ← "website" bucket URL
+  landing_background text,                  -- ← "website" bucket URL
   updated_at         timestamptz not null default now()
 );
 
@@ -539,17 +570,27 @@ create table if not exists public.agency_settings (
   updated_at         timestamptz not null default now()
 );
 
+-- document_templates:
+--   name           → template label shown in TemplateSelector / SaveTemplateModal
+--   template       → jsonb; either { html, styles } (TemplateService) or the
+--                    positioned-field map (DocumentTemplateService)
+--   is_default     → the template used when printing without an explicit choice
+--   has_conditions → append the rental conditions page when printing
+--   template_name  → legacy label column, kept for older rows
 create table if not exists public.document_templates (
-  id            uuid primary key default gen_random_uuid(),
-  agency_id     text,
-  template_type text not null,              -- contrat|devis|facture|recu|engagement
-  template      jsonb not null default '{}'::jsonb,
-  template_name text,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id             uuid primary key default gen_random_uuid(),
+  agency_id      text,
+  template_type  text not null,             -- contrat|devis|facture|recu|engagement
+  name           text,
+  template       jsonb not null default '{}'::jsonb,
+  is_default     boolean not null default false,
+  has_conditions boolean not null default false,
+  template_name  text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
 );
 
--- Optional audit trail for logins (create_admin_session RPC writes here) ───────
+-- Optional audit trail for logins (create_admin_session RPC writes here) ──────
 create table if not exists public.user_sessions (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid references auth.users(id) on delete cascade,
@@ -568,10 +609,11 @@ create table if not exists public.user_sessions (
 --   cars        → car photos           (uploadCarImage.ts        → .from('cars'))
 --   clients     → client photo + docs  (uploadClientImage.ts     → .from('clients'))
 --   worker      → worker photos        (uploadWorkerImage.ts     → .from('worker'))
---   inspection  → inspection photos    (uploadInspectionImage.ts → .from('inspection'))
+--   inspection  → inspection photos    (uploadInspectionImage.ts → .from('inspection')
+--                                       and ReservationsService.uploadInspectionPhoto)
 --   website     → logo / backgrounds   (uploadWebsiteImage.ts    → .from('website'))
 --
---   public = true  →  getPublicUrl() returns a directly-viewable URL, so images
+--   public = true → getPublicUrl() returns a directly-viewable URL, so images
 --   are displayed straight from the bucket while the DB only keeps that URL.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
@@ -614,7 +656,7 @@ end $$;
 -- 8. FUNCTIONS / RPCs  (called by the front-end)
 -- ═════════════════════════════════════════════════════════════════════════════
 
--- 8.1 is_admin() — helper used by policies/functions ───────────────────────────
+-- 8.1 is_admin() — helper used by policies/functions ──────────────────────────
 create or replace function public.is_admin()
 returns boolean
 language sql stable security definer set search_path = public as $$
@@ -624,44 +666,71 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
--- 8.2 admin_create_worker() — create a worker FROM THE TEAM INTERFACE ──────────
---     Creates a real Supabase Auth user (so the worker logs in with his own
---     email + password), the workers HR row, and his interface/action
---     permissions — all in one call, WITHOUT disturbing the admin's session.
+-- 8.2 admin_create_worker() — create a worker FROM THE TEAM INTERFACE ─────────
+--     Creates a REAL, EMAIL-CONFIRMED Supabase Auth user (so the worker can log
+--     in immediately with signInWithPassword), the HR workers row with EVERY
+--     field from the form, and his interface/action permissions — all in one
+--     call, WITHOUT switching the admin's session.
+--
+--     ⚠ The argument list and ORDER must match
+--       DatabaseService.createWorker() → supabase.rpc('admin_create_worker', {...})
+--       p_email, p_password, p_full_name, p_username, p_phone, p_date_of_birth,
+--       p_address, p_type, p_role_id, p_photo_url, p_base_salary,
+--       p_payment_type, p_permissions
+--
 --     p_permissions is a JSON array like:
 --       [{"interfaceId":"reservations","actions":["view","create","print"]},
 --        {"interfaceId":"clients","actions":["view"]}]
+--
+--     Older signatures are dropped first so PostgREST never sees two overloads
+--     (which would make the rpc() call ambiguous).
+drop function if exists public.admin_create_worker(
+  text, text, text, text, text, uuid, text, numeric, text, jsonb);
+drop function if exists public.admin_create_worker(
+  text, text, text, text, text, date, text, text, uuid, text, numeric, text, jsonb);
+
 create or replace function public.admin_create_worker(
-  p_email       text,
-  p_password    text,
-  p_full_name   text,
-  p_phone       text default null,
-  p_type        text default 'worker',
-  p_role_id     uuid default null,
-  p_photo_url   text default null,
-  p_base_salary numeric default null,
-  p_payment_type text default null,
-  p_permissions jsonb default '[]'::jsonb
+  p_email         text,
+  p_password      text,
+  p_full_name     text,
+  p_username      text    default null,
+  p_phone         text    default null,
+  p_date_of_birth date    default null,
+  p_address       text    default null,
+  p_type          text    default 'worker',
+  p_role_id       uuid    default null,
+  p_photo_url     text    default null,
+  p_base_salary   numeric default null,
+  p_payment_type  text    default null,
+  p_permissions   jsonb   default '[]'::jsonb
 )
 returns uuid
 language plpgsql
-security definer set search_path = public, auth
+security definer
+set search_path = public, auth, extensions
 as $$
 declare
   v_uid       uuid := gen_random_uuid();
   v_worker_id uuid;
   v_perm      jsonb;
+  v_email     text := lower(trim(p_email));
 begin
-  -- Only an admin may create workers
+  -- Only an admin may create workers (blocks anonymous privilege escalation).
   if not public.is_admin() then
     raise exception 'ONLY_ADMIN_CAN_CREATE_WORKER';
   end if;
 
-  if exists (select 1 from auth.users where email = lower(p_email)) then
+  if v_email is null or length(v_email) = 0 then
+    raise exception 'EMAIL_REQUIRED';
+  end if;
+  if p_password is null or length(p_password) = 0 then
+    raise exception 'PASSWORD_REQUIRED';
+  end if;
+  if exists (select 1 from auth.users where email = v_email) then
     raise exception 'EMAIL_ALREADY_EXISTS';
   end if;
 
-  -- 1) Create the Supabase Auth account (email confirmed so he can log in now)
+  -- 1) Create the Supabase Auth account (email confirmed → can log in now).
   insert into auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
@@ -669,10 +738,14 @@ begin
     confirmation_token, recovery_token, email_change_token_new, email_change
   ) values (
     v_uid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
-    lower(p_email), crypt(p_password, gen_salt('bf')),
+    v_email, crypt(p_password, gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
-    jsonb_build_object('role', p_type, 'full_name', p_full_name, 'username', p_full_name),
+    jsonb_build_object(
+      'role', p_type,
+      'full_name', p_full_name,
+      'username', coalesce(p_username, p_full_name)
+    ),
     now(), now(),
     '', '', '', ''
   );
@@ -682,24 +755,29 @@ begin
     last_sign_in_at, created_at, updated_at
   ) values (
     gen_random_uuid(), v_uid,
-    jsonb_build_object('sub', v_uid::text, 'email', lower(p_email)),
+    jsonb_build_object('sub', v_uid::text, 'email', v_email),
     'email', v_uid::text,
     now(), now(), now()
   );
 
-  -- (the on_auth_user_created trigger already inserted the profile with role=p_type)
+  -- (the on_auth_user_created trigger already inserted the profile with
+  --  role = p_type, taken from the metadata above)
 
-  -- 2) Create the HR worker row, linked to the auth account
+  -- 2) Create the HR worker row (with EVERY field from the form), linked to the
+  --    auth account. login_enabled/password kept for the legacy fallback.
   insert into public.workers (
-    user_id, full_name, phone, email, profile_photo, type,
-    role_id, base_salary, payment_type, login_enabled, active
+    user_id, full_name, date_of_birth, phone, email, address, profile_photo,
+    type, role_id, base_salary, payment_type, username, password,
+    login_enabled, active
   ) values (
-    v_uid, p_full_name, p_phone, lower(p_email), p_photo_url, p_type,
-    p_role_id, p_base_salary, p_payment_type, true, true
+    v_uid, p_full_name, p_date_of_birth, p_phone, v_email, p_address, p_photo_url,
+    p_type, p_role_id, p_base_salary, p_payment_type,
+    coalesce(p_username, split_part(v_email, '@', 1)), p_password,
+    true, true
   )
   returning id into v_worker_id;
 
-  -- 3) Store his permissions (which interfaces + which action buttons)
+  -- 3) Store his permissions (which interfaces + which action buttons).
   for v_perm in select * from jsonb_array_elements(coalesce(p_permissions, '[]'::jsonb))
   loop
     insert into public.worker_permissions (worker_id, interface_id, actions)
@@ -718,7 +796,7 @@ begin
   return v_worker_id;
 end $$;
 
--- 8.3 set_worker_permissions() — update a worker's permissions later ───────────
+-- 8.3 set_worker_permissions() — update a worker's permissions later ──────────
 create or replace function public.set_worker_permissions(
   p_worker_id   uuid,
   p_permissions jsonb
@@ -749,9 +827,8 @@ begin
   end loop;
 end $$;
 
--- 8.4 get_my_permissions() — the logged-in user asks "what can I see/do?" ──────
+-- 8.4 get_my_permissions() — the logged-in user asks "what can I see/do?" ─────
 --     Returns { role, is_admin, permissions:[{interfaceId, actions[]}] }.
---     Admins implicitly get everything (front-end treats is_admin=true as all).
 create or replace function public.get_my_permissions()
 returns jsonb
 language sql stable security definer set search_path = public as $$
@@ -771,15 +848,18 @@ language sql stable security definer set search_path = public as $$
   where p.id = auth.uid();
 $$;
 
--- 8.5 login_worker() — LEGACY fallback used by Login.tsx when a worker was NOT ─
---     created as a real auth user (checks the workers table directly).
+-- 8.5 login_worker() — fallback used by Login.tsx when Supabase Auth rejects ──
+--     the credentials (worker rows created before the auth wiring existed).
+--     crypt() is only evaluated for bcrypt-hashed passwords ('$2…'), so a
+--     plaintext password never triggers a missing-function error.
 create or replace function public.login_worker(
   p_email_or_username text,
   p_password          text
 )
 returns jsonb
 language plpgsql
-security definer set search_path = public
+security definer
+set search_path = public, extensions
 as $$
 declare w public.workers%rowtype;
 begin
@@ -788,7 +868,10 @@ begin
   where active = true
     and login_enabled = true
     and (lower(email) = lower(p_email_or_username) or username = p_email_or_username)
-    and (password = p_password or password = crypt(p_password, password))
+    and (
+      password = p_password
+      or (password like '$2%' and password = crypt(p_password, password))
+    )
   limit 1;
 
   if not found then
@@ -831,13 +914,13 @@ end $$;
 create or replace function public.get_reserved_periods(p_car_id uuid)
 returns table(departure_date date, return_date date)
 language sql stable security definer set search_path = public as $$
-  select departure_date, return_date
-  from public.reservations
-  where car_id = p_car_id
-    and status in ('pending','confirmed','active');
+  select r.departure_date, r.return_date
+  from public.reservations r
+  where r.car_id = p_car_id
+    and r.status in ('pending','accepted','confirmed','active');
 $$;
 
--- 8.8 get_unavailable_car_ids() — car ids booked over a period ─────────────────
+-- 8.8 get_unavailable_car_ids() — car ids booked over a period ────────────────
 create or replace function public.get_unavailable_car_ids(p_from date, p_to date)
 returns setof uuid
 language sql stable security definer set search_path = public as $$
@@ -873,7 +956,7 @@ end $$;
 
 -- 8.10 create_website_reservation() — the ONLY public write path (anon) ───────
 --      Creates client + reservation + services (+ consumes a promo code) in a
---      single transaction, re-checking availability under a lock.
+--      single transaction, re-checking availability first.
 create or replace function public.create_website_reservation(
   p_client      jsonb,
   p_reservation jsonb,
@@ -978,8 +1061,8 @@ end $$;
 -- for the dashboard to work. The per-worker gating (which interface / which
 -- button) is enforced in the UI via worker_permissions + get_my_permissions().
 --
--- Public-site tables allow anonymous READ only; all writes from the public site
--- go through the SECURITY DEFINER create_website_reservation() RPC above.
+-- All writes coming from the PUBLIC website go through the SECURITY DEFINER
+-- create_website_reservation() RPC above.
 --
 -- 🔒 HARDENING (recommended once you switch the client to attach the JWT, i.e.
 --    set `persistSession: true` in src/supabase.ts): replace the `app_rw`
@@ -1008,7 +1091,7 @@ begin
   end loop;
 end $$;
 
--- 9.2 Grants so the anon/authenticated roles can actually use the objects ──────
+-- 9.2 Grants so the anon/authenticated roles can actually use the objects ─────
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
 grant select on public.admin_count to anon, authenticated;
@@ -1022,23 +1105,150 @@ alter default privileges in schema public
 -- ═════════════════════════════════════════════════════════════════════════════
 -- 10. SEED DATA (optional starter rows)
 -- ═════════════════════════════════════════════════════════════════════════════
-insert into public.inspection_checklist_items (category, item_name, display_order) values
-  ('security',   'Roue de secours',        1),
-  ('security',   'Extincteur',             2),
-  ('security',   'Triangle de signalisation', 3),
-  ('equipment',  'Poste radio',            4),
-  ('equipment',  'Climatisation',          5),
-  ('comfort',    'Tapis de sol',           6),
-  ('cleanliness','Propreté intérieure',    7)
-on conflict do nothing;
+insert into public.inspection_checklist_items (category, item_name, display_order)
+select v.category, v.item_name, v.display_order
+from (values
+  ('security',    'Roue de secours',            1),
+  ('security',    'Extincteur',                 2),
+  ('security',    'Triangle de signalisation',  3),
+  ('equipment',   'Poste radio',                4),
+  ('equipment',   'Climatisation',              5),
+  ('comfort',     'Tapis de sol',               6),
+  ('cleanliness', 'Propreté intérieure',        7)
+) as v(category, item_name, display_order)
+where not exists (
+  select 1 from public.inspection_checklist_items i
+  where i.item_name = v.item_name
+);
+
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 11. SAFETY NET — bring an EXISTING project up to date
+-- ═════════════════════════════════════════════════════════════════════════════
+-- The `create table if not exists` statements above do nothing when a table is
+-- already present, so re-running this file on an older project would silently
+-- skip newer columns. These ALTERs make the file safe to re-run anywhere.
+-- (On a brand-new project they are all no-ops.)
+
+alter table public.cars
+  add column if not exists images              text[] default '{}',
+  add column if not exists fuel_level          text,
+  add column if not exists is_hidden_from_site boolean not null default false;
+
+alter table public.workers
+  add column if not exists user_id       uuid references auth.users(id) on delete set null,
+  add column if not exists date_of_birth date,
+  add column if not exists address       text,
+  add column if not exists username      text,
+  add column if not exists password      text,
+  add column if not exists login_enabled boolean not null default false,
+  add column if not exists active        boolean not null default true;
+
+alter table public.reservations
+  add column if not exists price_per_day              numeric,
+  add column if not exists price_week                 numeric,
+  add column if not exists price_month                numeric,
+  add column if not exists caution_amount_dzd         numeric,
+  add column if not exists caution_currency           text default 'DZD',
+  add column if not exists euro_rate                  numeric,
+  add column if not exists assurance_enabled          boolean default false,
+  add column if not exists assurance_percentage       numeric,
+  add column if not exists conditions                 text,
+  add column if not exists conditions_text            text,
+  add column if not exists protection_assurance_id    uuid,
+  add column if not exists protection_assurance_name  text,
+  add column if not exists protection_assurance_price numeric,
+  add column if not exists created_by                 uuid,
+  add column if not exists created_by_name            text,
+  add column if not exists activated_at               timestamptz,
+  add column if not exists completed_at               timestamptz;
+
+alter table public.reservation_services
+  add column if not exists driver_id      uuid references public.workers(id) on delete set null,
+  add column if not exists driver_caution numeric default 0;
+
+alter table public.vehicle_expenses
+  add column if not exists current_mileage     int,
+  add column if not exists next_vidange_km     int,
+  add column if not exists expiration_date     date,
+  add column if not exists expense_name        text,
+  add column if not exists oil_filter_changed  boolean not null default false,
+  add column if not exists air_filter_changed  boolean not null default false,
+  add column if not exists fuel_filter_changed boolean not null default false,
+  add column if not exists ac_filter_changed   boolean not null default false;
+
+alter table public.document_templates
+  add column if not exists name           text,
+  add column if not exists is_default     boolean not null default false,
+  add column if not exists has_conditions boolean not null default false,
+  add column if not exists template_name  text;
+
+alter table public.website_settings
+  add column if not exists landing_background text,
+  add column if not exists phone_number_2     text,
+  add column if not exists bank_number        text;
+
+alter table public.special_offers
+  add column if not exists label          text,
+  add column if not exists discount_type  text,
+  add column if not exists discount_value numeric,
+  add column if not exists start_date     date,
+  add column if not exists end_date       date;
+
+alter table public.payments
+  add column if not exists status text default 'completed';
+
+-- The named FK the PostgREST embed hint depends on
+-- (protection_assurances!reservations_protection_assurance_fkey).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'reservations_protection_assurance_fkey'
+  ) then
+    alter table public.reservations
+      add constraint reservations_protection_assurance_fkey
+      foreign key (protection_assurance_id)
+      references public.protection_assurances(id) on delete set null;
+  end if;
+end $$;
+
+-- The two upsert targets the app relies on (onConflict).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'vehicle_inspections_reservation_id_type_key'
+  ) then
+    alter table public.vehicle_inspections
+      add constraint vehicle_inspections_reservation_id_type_key
+      unique (reservation_id, type);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'inspection_responses_inspection_id_checklist_item_id_key'
+  ) then
+    alter table public.inspection_responses
+      add constraint inspection_responses_inspection_id_checklist_item_id_key
+      unique (inspection_id, checklist_item_id);
+  end if;
+end $$;
+
+-- Grant again so columns/tables added by section 11 are covered.
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant execute on all functions in schema public to anon, authenticated;
+
+-- Tell PostgREST to reload its schema cache so every table/column/RPC above is
+-- usable IMMEDIATELY (without this you may get PGRST204 "column not found" for
+-- a few minutes).
+notify pgrst, 'reload schema';
 
 -- =============================================================================
 --  END. After running:
---   • Create your ADMIN from the app's Login page ("Créer un compte" — first
---     connection only). It signs up in Supabase Auth and becomes role 'admin'.
---   • Create WORKERS from the Team (Équipe) interface. Wire the "Ajouter un
---     travailleur" + permissions form to:  supabase.rpc('admin_create_worker', …)
---     and "Gérer les permissions" to:      supabase.rpc('set_worker_permissions', …)
---     Each worker then logs in with his own email + password, and the UI uses
---     supabase.rpc('get_my_permissions') to show only his interfaces & buttons.
+--   • Create your first ADMIN in Supabase → Authentication → Users → "Add user"
+--     (tick "Auto Confirm User"). The on_auth_user_created trigger gives the
+--     first user the 'admin' role automatically. Then log in from the app.
+--   • Create WORKERS from the Team (Équipe) interface: the app calls
+--     supabase.rpc('admin_create_worker', …), which creates their Auth account,
+--     their HR row and their permissions in one shot. Each worker then logs in
+--     with his own email + password.
 -- =============================================================================
