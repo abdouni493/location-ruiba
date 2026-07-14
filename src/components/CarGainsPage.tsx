@@ -368,7 +368,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               </motion.div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
-                  {T('Gains par Véhicule', 'الأرباح حسب المركبة', lang)}
+                  {T('Bénéfice par Véhicule', 'الأرباح حسب المركبة', lang)}
                 </h1>
                 <p className="text-slate-300 text-sm mt-1 font-medium">
                   {T('Locations, dépenses et rentabilité détaillées par véhicule', 'الإيجارات والمصاريف والربحية بالتفصيل لكل مركبة', lang)}
