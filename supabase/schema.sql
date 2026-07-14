@@ -890,6 +890,135 @@ begin
   );
 end $$;
 
+grant execute on function public.login_worker(text, text) to anon, authenticated;
+
+-- 8.5b update_login_credentials() — Settings → "Informations de Connexion".
+--      Changes the current account's email / username / password after
+--      verifying the current password. Updates both auth.users (Supabase Auth
+--      login) and public.workers (login_worker fallback + Settings display).
+--      The app disables the SDK session, so supabase.auth.updateUser() is not
+--      reliable; this SECURITY DEFINER RPC does the change server-side.
+create or replace function public.update_login_credentials(
+  p_current_email    text,
+  p_current_password text,
+  p_new_email        text default null,
+  p_new_password     text default null,
+  p_new_username     text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  v_email     text := lower(trim(p_current_email));
+  v_new_email text := nullif(lower(trim(coalesce(p_new_email, ''))), '');
+  v_new_pass  text := nullif(p_new_password, '');
+  v_new_user  text := nullif(trim(coalesce(p_new_username, '')), '');
+  v_uid       uuid;
+  v_worker    public.workers%rowtype;
+  v_has_worker boolean := false;
+  v_auth_ok   boolean := false;
+  v_worker_ok boolean := false;
+begin
+  if v_email is null or length(v_email) = 0 then
+    raise exception 'EMAIL_REQUIRED';
+  end if;
+  if p_current_password is null or length(p_current_password) = 0 then
+    raise exception 'CURRENT_PASSWORD_REQUIRED';
+  end if;
+
+  select id into v_uid
+  from auth.users
+  where lower(email) = v_email
+    and encrypted_password is not null
+    and encrypted_password = crypt(p_current_password, encrypted_password)
+  limit 1;
+
+  if v_uid is not null then
+    v_auth_ok := true;
+  end if;
+
+  select * into v_worker
+  from public.workers
+  where lower(email) = v_email
+  limit 1;
+
+  if found then
+    v_has_worker := true;
+    if v_worker.password is not null and (
+         v_worker.password = p_current_password
+         or (v_worker.password like '$2%' and v_worker.password = crypt(p_current_password, v_worker.password))
+       ) then
+      v_worker_ok := true;
+    end if;
+    if v_uid is null and v_worker.user_id is not null then
+      v_uid := v_worker.user_id;
+    end if;
+  end if;
+
+  if not v_auth_ok and not v_worker_ok then
+    raise exception 'INVALID_CURRENT_PASSWORD';
+  end if;
+
+  if v_new_email is not null and v_new_email <> v_email then
+    if exists (
+      select 1 from auth.users
+      where lower(email) = v_new_email and id is distinct from v_uid
+    ) then
+      raise exception 'EMAIL_ALREADY_EXISTS';
+    end if;
+    if exists (
+      select 1 from public.workers
+      where lower(email) = v_new_email and (v_worker.id is null or id <> v_worker.id)
+    ) then
+      raise exception 'EMAIL_ALREADY_EXISTS';
+    end if;
+  end if;
+
+  if v_uid is not null then
+    update auth.users
+    set email              = coalesce(v_new_email, email),
+        encrypted_password = case when v_new_pass is not null
+                                  then crypt(v_new_pass, gen_salt('bf'))
+                                  else encrypted_password end,
+        email_confirmed_at = coalesce(email_confirmed_at, now()),
+        raw_user_meta_data = case when v_new_user is not null
+                                  then coalesce(raw_user_meta_data, '{}'::jsonb)
+                                       || jsonb_build_object('username', v_new_user)
+                                  else raw_user_meta_data end,
+        updated_at         = now()
+    where id = v_uid;
+
+    update auth.identities
+    set identity_data = jsonb_set(
+          coalesce(identity_data, '{}'::jsonb),
+          '{email}',
+          to_jsonb(coalesce(v_new_email, v_email))
+        ),
+        updated_at = now()
+    where user_id = v_uid and provider = 'email';
+
+    if v_new_user is not null and to_regclass('public.profiles') is not null then
+      update public.profiles set username = v_new_user where id = v_uid;
+    end if;
+  end if;
+
+  if v_has_worker then
+    update public.workers
+    set email         = coalesce(v_new_email, email),
+        username      = coalesce(v_new_user, username),
+        password      = coalesce(v_new_pass, password),
+        login_enabled = true
+    where id = v_worker.id;
+  end if;
+
+  return jsonb_build_object('success', true, 'email', coalesce(v_new_email, v_email));
+end $$;
+
+grant execute on function public.update_login_credentials(text, text, text, text, text)
+  to anon, authenticated;
+
 -- 8.6 create_admin_session() — optional login audit trail (sessionService.ts) ─
 create or replace function public.create_admin_session(
   p_access_token  text,

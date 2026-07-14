@@ -816,6 +816,38 @@ export class DatabaseService {
     };
   }
 
+  /**
+   * Change the login credentials (email / username / password) of the account
+   * currently logged in. The current password is required and verified
+   * server-side. Updates both the Supabase Auth account (used by
+   * signInWithPassword) and the workers row (used by the login_worker
+   * fallback), via the update_login_credentials() RPC.
+   */
+  static async updateLoginCredentials(params: {
+    currentEmail: string;
+    currentPassword: string;
+    newEmail?: string;
+    newPassword?: string;
+    newUsername?: string;
+  }): Promise<{ success: boolean; email?: string; error?: string }> {
+    const { data, error } = await supabase.rpc('update_login_credentials', {
+      p_current_email: params.currentEmail,
+      p_current_password: params.currentPassword,
+      p_new_email: params.newEmail ?? null,
+      p_new_password: params.newPassword ?? null,
+      p_new_username: params.newUsername ?? null,
+    });
+
+    if (error) {
+      // Surface the raised exception code (INVALID_CURRENT_PASSWORD, …) so the
+      // UI can show a meaningful message.
+      const code = error.message || 'UPDATE_FAILED';
+      return { success: false, error: code };
+    }
+
+    return { success: true, email: (data as any)?.email };
+  }
+
   static async deleteWorker(id: string): Promise<void> {
     const { error } = await supabase
       .from('workers')

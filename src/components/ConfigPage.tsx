@@ -36,9 +36,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
   const [securityData, setSecurityData] = useState({
     username: '',
     email: user.email,
+    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingSecurity, setSavingSecurity] = useState(false);
 
   // Database
   const [lastBackup] = useState('Aujourd\'hui à 10:45');
@@ -110,6 +113,113 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
   const handleSecurityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setSecurityData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const notify = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  // Save the profile (full name) to the workers row.
+  const handleSaveProfile = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!profileData.name?.trim()) {
+      notify('error', lang === 'fr' ? 'Le nom ne peut pas être vide.' : 'لا يمكن أن يكون الاسم فارغًا.');
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      const { error } = await supabase
+        .from('workers')
+        .update({ full_name: profileData.name.trim() })
+        .eq('email', user.email);
+      if (error) throw error;
+      notify('success', lang === 'fr' ? 'Profil mis à jour avec succès!' : 'تم تحديث الملف الشخصي بنجاح!');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      notify('error', lang === 'fr' ? 'Erreur lors de la mise à jour du profil' : 'خطأ في تحديث الملف الشخصي');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Update the login credentials (email / username / password).
+  const handleSaveSecurity = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const currentEmail = user.email;
+    const newEmail = securityData.email.trim();
+    const newUsername = securityData.username.trim();
+    const wantsPasswordChange = securityData.newPassword.length > 0 || securityData.confirmPassword.length > 0;
+    const emailChanged = newEmail.toLowerCase() !== (currentEmail || '').toLowerCase();
+    const usernameChanged = newUsername.length > 0;
+
+    if (!emailChanged && !usernameChanged && !wantsPasswordChange) {
+      notify('error', lang === 'fr' ? 'Aucune modification à enregistrer.' : 'لا توجد تغييرات للحفظ.');
+      return;
+    }
+
+    if (!securityData.currentPassword) {
+      notify('error', lang === 'fr'
+        ? 'Veuillez saisir votre mot de passe actuel pour confirmer.'
+        : 'يرجى إدخال كلمة المرور الحالية للتأكيد.');
+      return;
+    }
+
+    if (wantsPasswordChange) {
+      if (securityData.newPassword.length < 6) {
+        notify('error', lang === 'fr'
+          ? 'Le nouveau mot de passe doit contenir au moins 6 caractères.'
+          : 'يجب أن تحتوي كلمة المرور الجديدة على 6 أحرف على الأقل.');
+        return;
+      }
+      if (securityData.newPassword !== securityData.confirmPassword) {
+        notify('error', lang === 'fr'
+          ? 'Les mots de passe ne correspondent pas.'
+          : 'كلمتا المرور غير متطابقتين.');
+        return;
+      }
+    }
+
+    try {
+      setSavingSecurity(true);
+      const result = await DatabaseService.updateLoginCredentials({
+        currentEmail: currentEmail,
+        currentPassword: securityData.currentPassword,
+        newEmail: emailChanged ? newEmail : undefined,
+        newPassword: wantsPasswordChange ? securityData.newPassword : undefined,
+        newUsername: usernameChanged ? newUsername : undefined,
+      });
+
+      if (!result.success) {
+        const raw = result.error || '';
+        let msg = lang === 'fr' ? 'Erreur lors de la mise à jour' : 'خطأ في التحديث';
+        if (raw.includes('INVALID_CURRENT_PASSWORD')) {
+          msg = lang === 'fr' ? 'Mot de passe actuel incorrect.' : 'كلمة المرور الحالية غير صحيحة.';
+        } else if (raw.includes('EMAIL_ALREADY_EXISTS')) {
+          msg = lang === 'fr' ? 'Cet e-mail est déjà utilisé.' : 'هذا البريد الإلكتروني مستخدم بالفعل.';
+        }
+        notify('error', msg);
+        return;
+      }
+
+      // Clear password fields; keep the (possibly new) email/username shown.
+      setSecurityData(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      }));
+
+      notify('success', lang === 'fr'
+        ? 'Identifiants mis à jour. Utilisez-les à la prochaine connexion.'
+        : 'تم تحديث بيانات الدخول. استخدمها في تسجيل الدخول القادم.');
+    } catch (error) {
+      console.error('Error updating credentials:', error);
+      notify('error', lang === 'fr' ? 'Erreur lors de la mise à jour' : 'خطأ في التحديث');
+    } finally {
+      setSavingSecurity(false);
+    }
   };
 
   const handleSaveAgencyInfo = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -662,7 +772,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   <h2 className="text-2xl font-black uppercase tracking-tighter">👤 {{fr: 'Mon Profil', ar: 'ملفي الشخصي'}[lang]}</h2>
                 </div>
 
-                <form className="p-8 space-y-6" onSubmit={(e) => e.preventDefault()}>
+                <form className="p-8 space-y-6" onSubmit={handleSaveProfile}>
                   {/* Profile Photo */}
                   <div className="space-y-4">
                     <label className="label-saas">📸 {{fr: 'Photo de profil', ar: 'صورة الملف'}[lang]}</label>
@@ -712,9 +822,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 btn-saas-primary py-3"
+                      disabled={savingProfile}
+                      className="flex-1 btn-saas-primary py-3 disabled:opacity-60"
                     >
-                      {{fr: 'Enregistrer', ar: 'حفظ'}[lang]}
+                      {savingProfile
+                        ? {fr: 'Enregistrement...', ar: 'جاري الحفظ...'}[lang]
+                        : {fr: 'Enregistrer', ar: 'حفظ'}[lang]}
                     </button>
                   </div>
                 </form>
@@ -728,7 +841,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   </h2>
                 </div>
 
-                <form className="p-8 space-y-6" onSubmit={(e) => e.preventDefault()}>
+                <form className="p-8 space-y-6" onSubmit={handleSaveSecurity}>
                   {/* Username */}
                   <div className="space-y-2">
                     <label className="label-saas">👤 {{fr: 'Nom d\'utilisateur', ar: 'اسم المستخدم'}[lang]}</label>
@@ -743,7 +856,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
 
                   {/* Email */}
                   <div className="space-y-2">
-                    <label className="label-saas">📧 {{fr: 'E-mail de récupération', ar: 'البريد الإلكتروني للاستعادة'}[lang]}</label>
+                    <label className="label-saas">📧 {{fr: 'E-mail de connexion', ar: 'البريد الإلكتروني لتسجيل الدخول'}[lang]}</label>
                     <input
                       type="email"
                       name="email"
@@ -751,6 +864,26 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                       onChange={handleSecurityChange}
                       className="input-saas"
                     />
+                    <p className="text-xs text-saas-text-muted">
+                      {{fr: 'Cet e-mail sert à vous connecter.', ar: 'يُستخدم هذا البريد لتسجيل الدخول.'}[lang]}
+                    </p>
+                  </div>
+
+                  {/* Current Password (required to confirm any change) */}
+                  <div className="space-y-2">
+                    <label className="label-saas">🔑 {{fr: 'Mot de passe actuel *', ar: 'كلمة المرور الحالية *'}[lang]}</label>
+                    <input
+                      type="password"
+                      name="currentPassword"
+                      value={securityData.currentPassword}
+                      onChange={handleSecurityChange}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="input-saas"
+                    />
+                    <p className="text-xs text-saas-text-muted">
+                      {{fr: 'Requis pour confirmer toute modification des identifiants.', ar: 'مطلوبة لتأكيد أي تعديل على بيانات الدخول.'}[lang]}
+                    </p>
                   </div>
 
                   {/* New Password */}
@@ -789,9 +922,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 btn-saas-primary py-3"
+                      disabled={savingSecurity}
+                      className="flex-1 btn-saas-primary py-3 disabled:opacity-60"
                     >
-                      {{fr: 'Mettre à jour', ar: 'تحديث'}[lang]}
+                      {savingSecurity
+                        ? {fr: 'Mise à jour...', ar: 'جاري التحديث...'}[lang]
+                        : {fr: 'Mettre à jour', ar: 'تحديث'}[lang]}
                     </button>
                   </div>
                 </form>

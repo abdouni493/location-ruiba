@@ -633,7 +633,7 @@ export const VehicleExpenseModal: React.FC<VehicleExpenseModalProps> = ({
             onClick={handleSubmit}
             className="flex-1 btn-saas-primary py-3"
           >
-            {{fr: expense ? 'Modifier' : 'Ajouter', ar: expense ? 'تعديل' : 'إضافة'}[lang]}
+            {{fr: expense?.id ? 'Modifier' : 'Ajouter', ar: expense?.id ? 'تعديل' : 'إضافة'}[lang]}
           </button>
         </div>
       </motion.div>
