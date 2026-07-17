@@ -4,6 +4,8 @@
  * Language: Both Arabic (RTL) and French (LTR)
  */
 
+import { formatDateDMY } from '../utils/dateFormat';
+
 export interface ConditionItem {
   title: string;
   content: string;
@@ -230,7 +232,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     ? 'قام المستأجر بالاطلاع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد وتحمّل جميع المسؤوليات الثانوية.'
     : "Le locataire déclare avoir pris connaissance des présentes conditions de location et les accepter sans réserve, s'engage à signer ce contrat et à assumer toutes les responsabilités secondaires.";
 
-  const printDate = new Date().toLocaleDateString(isArabic ? 'en-US' : 'fr-FR');
+  const printDate = formatDateDMY(new Date());
 
   return `<!DOCTYPE html>
 <html dir="${dir}" lang="${language}">

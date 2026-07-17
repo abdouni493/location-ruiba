@@ -1,4 +1,5 @@
 import { ReservationDetails } from '../types';
+import { formatDateDMY } from '../utils/dateFormat';
 
 /**
  * Force a phone number to render strictly left-to-right, even inside an RTL (Arabic)
@@ -330,11 +331,11 @@ export const generateContractHTML = (
           <div class="field-row three-col">
             <div class="field">
               <div class="field-label">${labels.departure}</div>
-              <div class="field-value">${new Date(reservation?.step1?.departureDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA')}</div>
+              <div class="field-value">${formatDateDMY(reservation?.step1?.departureDate)}</div>
             </div>
             <div class="field">
               <div class="field-label">${labels.return}</div>
-              <div class="field-value">${new Date(reservation?.step1?.returnDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA')}</div>
+              <div class="field-value">${formatDateDMY(reservation?.step1?.returnDate)}</div>
             </div>
             <div class="field">
               <div class="field-label">${labels.duration}</div>
@@ -344,7 +345,7 @@ export const generateContractHTML = (
           <div class="field-row three-col">
             <div class="field">
               <div class="field-label">📅 ${labels.contractDate}</div>
-              <div class="field-value">${new Date().toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA')}</div>
+              <div class="field-value">${formatDateDMY(new Date())}</div>
             </div>
             <div class="field">
               <div class="field-label">🔢 ${labels.contractNumber}</div>
@@ -377,7 +378,7 @@ export const generateContractHTML = (
             </div>
             <div class="field">
               <div class="field-label">🎂 ${labels.birthDate}</div>
-              <div class="field-value">${reservation?.client?.dateOfBirth ? new Date(reservation.client.dateOfBirth).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(reservation?.client?.dateOfBirth)}</div>
             </div>
           </div>
           <div class="field-row">
@@ -397,13 +398,13 @@ export const generateContractHTML = (
             </div>
             <div class="field">
               <div class="field-label">📅 ${labels.licenseDelivery}</div>
-              <div class="field-value">${reservation?.client?.licenseDeliveryDate ? new Date(reservation.client.licenseDeliveryDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(reservation?.client?.licenseDeliveryDate)}</div>
             </div>
           </div>
           <div class="field-row">
             <div class="field">
               <div class="field-label">⏱️ ${labels.licenseExpiry}</div>
-              <div class="field-value">${reservation?.client?.licenseExpirationDate ? new Date(reservation.client.licenseExpirationDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(reservation?.client?.licenseExpirationDate)}</div>
             </div>
             <div class="field">
               <div class="field-label">📍 ${labels.licensePlace}</div>
@@ -433,7 +434,7 @@ export const generateContractHTML = (
             </div>
             <div class="field">
               <div class="field-label">🎂 ${labels.birthDate}</div>
-              <div class="field-value">${(secondConductor?.date_of_birth || secondConductor?.dateOfBirth) ? new Date(secondConductor.date_of_birth || secondConductor.dateOfBirth).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(secondConductor?.date_of_birth || secondConductor?.dateOfBirth)}</div>
             </div>
           </div>
           <div class="field-row">
@@ -453,13 +454,13 @@ export const generateContractHTML = (
             </div>
             <div class="field">
               <div class="field-label">📅 ${labels.licenseDelivery}</div>
-              <div class="field-value">${(secondConductor?.license_delivery_date || secondConductor?.licenseDeliveryDate) ? new Date(secondConductor.license_delivery_date || secondConductor.licenseDeliveryDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(secondConductor?.license_delivery_date || secondConductor?.licenseDeliveryDate)}</div>
             </div>
           </div>
           <div class="field-row">
             <div class="field">
               <div class="field-label">⏱️ ${labels.licenseExpiry}</div>
-              <div class="field-value">${(secondConductor?.license_expiration_date || secondConductor?.licenseExpirationDate) ? new Date(secondConductor.license_expiration_date || secondConductor.licenseExpirationDate).toLocaleDateString(isFrench ? 'fr-FR' : 'ar-SA') : ''}</div>
+              <div class="field-value">${formatDateDMY(secondConductor?.license_expiration_date || secondConductor?.licenseExpirationDate)}</div>
             </div>
             <div class="field">
               <div class="field-label">📍 ${labels.licensePlace}</div>

@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { DocumentType, Language, ReservationDetails } from '../types';
 import { TemplateService, DocumentTemplateRow } from './TemplateService';
+import { formatDateDMY } from '../utils/dateFormat';
 
 /**
  * PrintService: Strict database-driven printing system
@@ -144,7 +145,7 @@ export class PrintService {
       // Reservation
       'reservation.id': reservation.id,
       'reservation.number': reservation.id.substring(0, 8),
-      'reservation.date': new Date().toLocaleDateString(),
+      'reservation.date': formatDateDMY(new Date()),
       
       // Client
       'client.firstName': reservation.client.firstName,
@@ -166,8 +167,8 @@ export class PrintService {
       'vehicle.mileage': reservation.car.mileage || '0',
       
       // Rental
-      'rental.startDate': reservation.step1.departureDate,
-      'rental.endDate': reservation.step1.returnDate,
+      'rental.startDate': formatDateDMY(reservation.step1.departureDate),
+      'rental.endDate': formatDateDMY(reservation.step1.returnDate),
       'rental.days': days,
       'rental.duration': `${days} ${t('jours', 'أيام')}`,
       
