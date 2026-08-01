@@ -1283,7 +1283,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     srcDoc={generateConditionsPrintHTML(conditionsLanguage)}
                     style={{
                       width: '100%',
-                      height: '600px',
+                      /* Full A4 sheet: the preview shows exactly what gets printed
+                         (one page) instead of cutting it off halfway. */
+                      height: '297mm',
                       border: 'none',
                       borderRadius: '0.5rem'
                     }}

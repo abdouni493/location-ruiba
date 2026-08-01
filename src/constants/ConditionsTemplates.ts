@@ -200,7 +200,24 @@ export const getConditionsTemplate = (language: 'ar' | 'fr'): ConditionsTemplate
  *   - Acceptance box        : bg #f0f4ff, border #b8ccee
  *   - Signatures            : simple empty rectangles with the label below
  *   - Page border           : 2px solid #003399
+ *
+ * SINGLE-PAGE GUARANTEE — three independent layers, because a stray blank second
+ * sheet was being printed in both languages:
+ *   1. The sheet is sized in millimetres, never in pixels. A4 is 210 × 297mm which is
+ *      793.7 × 1122.52 CSS px, so the previous `width: 794px / min-height: 1123px`
+ *      overflowed the page box by a fraction of a pixel and always spilled onto a
+ *      second (blank) page — even when the content itself fitted.
+ *   2. Both languages are rendered at a reduced typographic scale (Arabic was
+ *      previously unscaled and genuinely overflowed; French was already scaled but
+ *      not enough), so the 17 conditions + acceptance box + signatures + footer fit
+ *      with room to spare.
+ *   3. `fitToPage()` runs in the print window and shrinks `--s` further if the real
+ *      text metrics still exceed the sheet, so the output survives font substitution.
  */
+
+/** Usable sheet height in mm — a hair under A4 so sub-pixel rounding cannot spill. */
+const SHEET_HEIGHT_MM = 296.5;
+
 export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   const template = getConditionsTemplate(language);
   const isArabic = language === 'ar';
@@ -208,14 +225,19 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   const textAlign = isArabic ? 'right' : 'left';
 
   /**
-   * The French wording is considerably longer than the Arabic one and used to spill onto a
-   * second A4 sheet. Both languages share one design; French simply renders it at a reduced
-   * scale (fonts + vertical rhythm) so the 17 conditions, the acceptance box and both
-   * signature boxes still fit on a single page. Horizontal gutters stay fixed so the two
-   * languages keep the same page frame.
+   * Per-language base scale (fonts + vertical rhythm). French wording is considerably
+   * longer than the Arabic one, so it renders smaller. Horizontal gutters stay fixed so
+   * both languages keep the same page frame. Measured against Chrome/Arial these leave
+   * ~110px (≈10%) of vertical headroom on the 1122.5px sheet, which absorbs the line-wrap
+   * differences caused by font substitution on other machines.
    */
-  const scale = isArabic ? 1 : 0.86;
-  const u = (n: number): string => `${Math.round(n * scale * 100) / 100}px`;
+  const scale = isArabic ? 0.97 : 0.85;
+
+  /**
+   * Every vertical dimension is emitted as `calc(<base>px * var(--s))` so `fitToPage()`
+   * can rescale the whole sheet by touching a single custom property.
+   */
+  const u = (n: number): string => `calc(${Math.round(n * scale * 100) / 100}px * var(--s))`;
 
   const conditionsHTML = template.conditions
     .map(
@@ -242,8 +264,13 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* Global typographic scale, narrowed by fitToPage() when the sheet overflows. */
+    :root { --s: 1; }
+
+    /* Height/overflow are pinned in @media print only, so the on-screen preview
+       iframe can still be scrolled through the whole sheet. */
     html, body {
-      width: 794px;
+      width: 210mm;
       margin: 0;
       padding: 0;
       background: white;
@@ -257,13 +284,15 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
       print-color-adjust: exact;
     }
 
-    /* ── PAGE ── */
+    /* ── PAGE ──
+       Exactly one sheet: fixed A4-minus-a-hair height with the overflow clipped, so
+       nothing can ever generate a second page. Block layout (not flex) so children
+       keep their natural height and .scrollHeight reports the true content size. */
     .page {
-      width: 794px;
-      min-height: 1123px;
-      padding-bottom: ${u(30)};
-      display: flex;
-      flex-direction: column;
+      width: 210mm;
+      height: ${SHEET_HEIGHT_MM}mm;
+      overflow: hidden;
+      padding-bottom: ${u(26)};
       background: white;
       border: 2px solid #003399;
     }
@@ -274,7 +303,6 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
       color: white;
       padding: ${u(18)} 47px ${u(15)};
       text-align: center;
-      flex-shrink: 0;
     }
 
     .header h1 {
@@ -293,16 +321,16 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     }
 
     /* ── CONTENT ──
-       No flex-grow: the content takes only the height it needs so the
-       acceptance box + signatures sit directly beneath the conditions
-       instead of being pushed to the bottom of the A4 page. */
+       The content takes only the height it needs so the acceptance box +
+       signatures sit directly beneath the conditions instead of being pushed
+       to the bottom of the A4 page. */
     .content {
-      padding: ${u(15)} 47px 0;
+      padding: ${u(13)} 47px 0;
     }
 
     /* ── CONDITION ROWS ── */
     .condition-item {
-      padding: ${u(7)} 0;
+      padding: ${u(6)} 0;
       border-bottom: 1px solid #eef0f7;
     }
     .condition-item:last-child { border-bottom: none; }
@@ -336,7 +364,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     /* ── SIGNATURES: simple empty rectangles ── */
     .signatures-section {
-      margin: ${u(16)} 47px 0;
+      margin: ${u(14)} 47px 0;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 27px;
@@ -347,7 +375,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .signature-box {
       border: 2px solid #003399;
       border-radius: 4px;
-      height: ${u(100)};
+      height: ${u(92)};
       background: #fff;
       display: flex;
       align-items: flex-start;
@@ -366,14 +394,20 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
       text-align: center;
       font-size: ${u(9)};
       color: #888;
-      margin: ${u(13)} 47px 0;
-      padding-top: ${u(10)};
+      margin: ${u(11)} 47px 0;
+      padding-top: ${u(9)};
       border-top: 1px solid #dde3f5;
     }
 
     @media print {
       @page { size: A4; margin: 0; }
-      html, body { width: 794px; }
+      html, body {
+        width: 210mm;
+        height: ${SHEET_HEIGHT_MM}mm;
+        overflow: hidden;
+      }
+      /* Nothing may introduce a page break: this document is one sheet, period. */
+      .page { page-break-after: avoid; page-break-inside: avoid; break-inside: avoid; }
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
@@ -383,7 +417,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   </style>
 </head>
 <body>
-  <div class="page">
+  <div class="page" id="page">
 
     <div class="header">
       <h1>${template.title}</h1>
@@ -416,6 +450,28 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     </div>
 
   </div>
+
+  <script>
+    /**
+     * Last line of defence against a second sheet: the base scale above is tuned to fit,
+     * but real text metrics depend on the installed fonts. If the content is still taller
+     * than the sheet, shrink the global scale until it fits (the page clips its overflow,
+     * so an unfitted sheet would silently lose the signatures rather than paginate).
+     * Runs synchronously at parse time — the document has no images or webfonts, so the
+     * measurement is already final when print() is called right after document.close().
+     */
+    (function fitToPage() {
+      var page = document.getElementById('page');
+      if (!page) return;
+      var root = document.documentElement;
+      var s = 1;
+      // 0.02 steps down to 0.6 => at most 20 reflows, all on a single static page.
+      while (page.scrollHeight > page.clientHeight && s > 0.6) {
+        s = Math.round((s - 0.02) * 100) / 100;
+        root.style.setProperty('--s', String(s));
+      }
+    })();
+  </script>
 </body>
 </html>`;
 };
