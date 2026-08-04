@@ -4,6 +4,7 @@ import { Client, Language, ReservationDetails } from '../types';
 import { X, Eye, ArrowLeft, TrendingUp, AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { ReservationsService } from '../services/ReservationsService';
 import { ReservationDetailsView } from './ReservationDetailsView';
+import { getTotalPaid } from '../utils/paymentTotals';
 
 interface ClientHistoryModalProps {
   isOpen: boolean;
@@ -13,14 +14,7 @@ interface ClientHistoryModalProps {
   lang: Language;
 }
 
-const calcPaid = (r: ReservationDetails): number => {
-  const payments = (r.payments || []) as any[];
-  if (payments.length > 0) {
-    const total = payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
-    if (total > 0) return total;
-  }
-  return Math.max(0, (Number(r.totalPrice) || 0) - (Number(r.remainingPayment) || 0));
-};
+const calcPaid = (r: ReservationDetails): number => getTotalPaid(r);
 
 const STATUS_CLS: Record<string, string> = {
   completed: 'bg-violet-100 text-violet-700 border-violet-200',

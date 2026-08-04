@@ -12,6 +12,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { getVehicleExpenses } from '../services/expenseService';
 import { generateReportHTML } from './ReportPrintTemplate';
+import { getTotalPaid } from '../utils/paymentTotals';
 
 interface CarGainsPageProps {
   lang: Language;
@@ -28,15 +29,8 @@ const fmtD = (d: string) => {
 };
 const dateKey = (d: string) => (d || '').substring(0, 10);
 
-// Calculate paid amount
-const calcPaid = (r: ReservationDetails): number => {
-  const payments = (r.payments || []) as Payment[];
-  if (payments.length > 0) {
-    const total = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    if (total > 0) return total;
-  }
-  return Math.max(0, (Number(r.totalPrice) || 0) - (Number(r.remainingPayment) || 0));
-};
+// Calculate paid amount: advance taken at booking + every payment recorded since
+const calcPaid = (r: ReservationDetails): number => getTotalPaid(r);
 
 // Check if [aStart, aEnd] overlaps the selected period
 const overlapsPeriod = (depDate: string, retDate: string, startDate: string, endDate: string): boolean => {

@@ -14,6 +14,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
 import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
+import { getRemaining, getTotalPaid } from '../utils/paymentTotals';
 
 /**
  * Force a phone number (or any latin/number string) to render strictly left-to-right,
@@ -365,11 +366,11 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Acompte:' : 'الدفعة المقدمة:'}</span>
-            <span>${reservation.advancePayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${getTotalPaid(reservation).toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Reste à Payer:' : 'المبلغ المتبقي:'}</span>
-            <span>${reservation.remainingPayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${getRemaining(reservation).toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
         </div>
         
@@ -425,11 +426,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
     const matchesFilter = filterStatus === 'all' || reservation.status === filterStatus;
 
-    const resPaid = (reservation.payments && reservation.payments.length > 0)
-      ? reservation.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
-      : (Number(reservation.advancePayment) || 0);
-    const resRemaining = Math.max(0, (Number(reservation.totalPrice) || 0) - resPaid);
-    const matchesDebt = !filterDebtOnly || resRemaining > 0;
+    const matchesDebt = !filterDebtOnly || getRemaining(reservation) > 0;
 
     return matchesSearch && matchesFilter && matchesDebt;
   });
@@ -848,9 +845,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           // Use the actual totalPrice from database, not the recalculated one
           const displayTotalPrice = reservation.totalPrice || totalCost;
           
-          const paidAmount = (reservation.payments && reservation.payments.length > 0)
-            ? reservation.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-            : (Number(reservation.advancePayment) || 0);
+          const paidAmount = getTotalPaid(reservation);
           const remainingAmount = Math.max(0, displayTotalPrice - paidAmount);
 
           // Per-status accent used on the card border + top strip so the state
@@ -1345,9 +1340,9 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
 
   if (type === 'payment' || type === 'receipt' || type === 'versement') {
     // Receipt template - calculate total paid from payments array
-    const totalPaid = reservation.payments?.reduce((sum, p) => sum + p.amount, 0) || reservation.advancePayment || 0;
-    const remaining = Math.max(0, reservation.totalPrice - totalPaid);
-    
+    const totalPaid = getTotalPaid(reservation);
+    const remaining = getRemaining(reservation);
+
     // Receipt template
     return {
       ...baseElements,
@@ -1373,7 +1368,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
     const tvaRate = reservation.tvaApplied ? 0.19 : 0;
     const tvaAmount = subtotal * tvaRate;
     const caution = reservation.deposit || 0;
-    const totalPaid = reservation.payments?.reduce((sum, payment) => sum + payment.amount, 0) || reservation.advancePayment || 0;
+    const totalPaid = getTotalPaid(reservation);
     const remaining = subtotal - totalPaid;
 
     return {
@@ -1919,9 +1914,7 @@ const PayDebtModal: React.FC<{
   onSave: (reservationId: string, amount: number, method: 'cash' | 'card' | 'transfer' | 'check', note: string, newRemaining: number) => Promise<void>;
 }> = ({ lang, reservation, onClose, onSave }) => {
   const totalPrice = Number(reservation.totalPrice) || 0;
-  const existingPaid = (reservation.payments && reservation.payments.length > 0)
-    ? reservation.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
-    : (Number(reservation.advancePayment) || 0);
+  const existingPaid = getTotalPaid(reservation);
   const currentRemaining = Math.max(0, totalPrice - existingPaid);
 
   const [amount, setAmount] = useState<string>('');
@@ -3943,7 +3936,7 @@ export const PersonalizationModal: React.FC<{
 
     // Calculate payment information
     const totalAmount = reservation.totalPrice || 0;
-    const totalPaid = reservation.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || reservation.advancePayment || 0;
+    const totalPaid = getTotalPaid(reservation);
     const remainingBalance = totalAmount - totalPaid;
     const currentPayment = reservation.payments?.[0] || { amount: 0, method: 'bank' };
 

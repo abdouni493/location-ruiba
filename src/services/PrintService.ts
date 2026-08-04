@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import { DocumentType, Language, ReservationDetails } from '../types';
 import { TemplateService, DocumentTemplateRow } from './TemplateService';
 import { formatDateDMY } from '../utils/dateFormat';
+import { getRemaining, getTotalPaid } from '../utils/paymentTotals';
 
 /**
  * PrintService: Strict database-driven printing system
@@ -133,9 +134,8 @@ export class PrintService {
   ): Record<string, any> {
     const t = (fr: string, ar: string) => lang === 'ar' ? ar : fr;
 
-    const totalPaid = reservation.payments?.reduce((sum, p) => sum + p.amount, 0) || 
-                     reservation.advancePayment || 0;
-    const remaining = Math.max(0, reservation.totalPrice - totalPaid);
+    const totalPaid = getTotalPaid(reservation);
+    const remaining = getRemaining(reservation);
     const days = this.calculateDays(
       reservation.step1.departureDate,
       reservation.step1.returnDate

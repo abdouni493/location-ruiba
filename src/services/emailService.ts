@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { ReservationDetails } from '../types';
 import html2pdf from 'html2pdf.js';
+import { getRemaining, getTotalPaid } from '../utils/paymentTotals';
 
 /**
  * Email Service for handling contract email operations
@@ -965,9 +966,9 @@ export class EmailService {
     const client   = reservation.client;
 
     const totalAmount     = reservation.totalPrice || 0;
-    const totalPaid       = reservation.payments?.reduce((s: number, p: any) => s + (p.amount || 0), 0) || reservation.advancePayment || 0;
+    const totalPaid       = getTotalPaid(reservation);
     const currentPayment  = reservation.payments?.[0]?.amount || totalPaid;
-    const remaining       = Math.max(0, totalAmount - totalPaid);
+    const remaining       = getRemaining(reservation);
 
     return `<!DOCTYPE html>
 <html dir="${textDir}" lang="${isFrench ? 'fr' : 'ar'}">

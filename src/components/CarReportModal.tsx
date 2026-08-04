@@ -3,6 +3,7 @@ import { Car, ReservationDetails, VehicleExpense, Language, ExpenseType } from '
 import { motion, AnimatePresence } from 'motion/react';
 import { generateReportHTML } from './ReportPrintTemplate';
 import { DatabaseService } from '../services/DatabaseService';
+import { getTotalPaid } from '../utils/paymentTotals';
 import {
   X, TrendingUp, TrendingDown, DollarSign, Calendar, Wrench,
   ShieldCheck, Activity, Droplets, Link as LinkIcon, ChevronDown,
@@ -66,19 +67,8 @@ export const CarReportModal: React.FC<CarReportModalProps> = ({
   const filteredExp  = expenses.filter(e => inRange(e.date || ''));
 
   // ── Calculations ──────────────────────────────────────────────────────────
-  /**
-   * Actual money collected:
-   *  1. Sum of individual payment records (most accurate)
-   *  2. Fallback: totalPrice − remainingPayment
-   */
-  const calcPaid = (r: ReservationDetails) => {
-    const pmts = (r.payments || []) as any[];
-    if (pmts.length > 0) {
-      const s = pmts.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-      if (s > 0) return s;
-    }
-    return Math.max(0, (Number(r.totalPrice) || 0) - (Number(r.remainingPayment) || 0));
-  };
+  /** Actual money collected: the advance taken at booking + every payment recorded since. */
+  const calcPaid = (r: ReservationDetails) => getTotalPaid(r);
 
   const totalCollected = filteredRes
     .filter(r => r.status !== 'cancelled')

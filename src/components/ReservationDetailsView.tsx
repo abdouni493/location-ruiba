@@ -5,45 +5,113 @@ import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, CreditCard, DollarSig
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
+import { normalizePayment, sortPaymentsByDate, sumPayments } from '../utils/paymentTotals';
 
 interface ReservationDetailsViewProps {
   lang: Language;
   reservation: ReservationDetails;
   onBack: () => void;
-  onUpdate?: (reservation: ReservationDetails) => void;
+  onUpdate?: (reservation: ReservationDetails) => void | Promise<void>;
 }
+
+/** What the user typed in the payment modal — the row id comes from the database. */
+type NewPaymentInput = {
+  amount: number;
+  method: 'cash' | 'card' | 'transfer';
+  note?: string;
+};
 
 export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ lang, reservation, onBack, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'financial'>('overview');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  // Payment rows are kept locally so an add/delete shows up immediately, then re-synced
+  // with whatever the parent re-fetched from the database.
+  const [payments, setPayments] = useState<Payment[]>(() =>
+    sortPaymentsByDate((reservation.payments || []).map(normalizePayment))
+  );
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPayments(sortPaymentsByDate((reservation.payments || []).map(normalizePayment)));
+  }, [reservation.id, reservation.payments]);
+
+  // The advance recorded at creation is not a payment row: it is counted on its own.
+  const initialAdvance = Number(reservation.advancePayment) || 0;
+  const totalPrice = Number(reservation.totalPrice) || 0;
+  const totalPaid = initialAdvance + sumPayments(payments);
+  const remaining = Math.max(0, totalPrice - totalPaid);
 
   const handleAddPayment = () => {
     setShowPaymentModal(true);
   };
 
-  const handleSavePayment = (payment: Payment) => {
+  /** Persists the reservation totals after the payments list changed. */
+  const persistTotals = async (nextPayments: Payment[]) => {
+    const nextRemaining = Math.max(0, totalPrice - (initialAdvance + sumPayments(nextPayments)));
     const updatedReservation = {
       ...reservation,
-      payments: [...reservation.payments, payment],
-      advancePayment: reservation.advancePayment + payment.amount,
-      remainingPayment: Math.max(0, reservation.remainingPayment - payment.amount)
+      payments: nextPayments,
+      remainingPayment: nextRemaining,
     };
-    onUpdate?.(updatedReservation);
+
+    if (onUpdate) {
+      await onUpdate(updatedReservation);
+    } else {
+      await ReservationsService.updateReservation(reservation.id, { remainingPayment: nextRemaining });
+    }
   };
 
-  const handleDeletePayment = (paymentId: string) => {
-    const paymentToDelete = reservation.payments.find(p => p.id === paymentId);
-    if (!paymentToDelete) return;
+  const handleSavePayment = async (input: NewPaymentInput) => {
+    // 1. Insert the row so the payment survives a refresh, 2. re-derive the totals.
+    const date = new Date().toISOString().split('T')[0];
+    const { id } = await ReservationsService.addPayment({
+      reservationId: reservation.id,
+      amount: input.amount,
+      paymentMethod: input.method,
+      date,
+      note: input.note,
+    });
 
-    const updatedReservation = {
-      ...reservation,
-      payments: reservation.payments.filter(p => p.id !== paymentId),
-      advancePayment: reservation.advancePayment - paymentToDelete.amount,
-      remainingPayment: reservation.remainingPayment + paymentToDelete.amount
-    };
-    onUpdate?.(updatedReservation);
+    const nextPayments = sortPaymentsByDate([
+      ...payments,
+      {
+        id,
+        reservationId: reservation.id,
+        amount: input.amount,
+        method: input.method,
+        date,
+        note: input.note,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    setPayments(nextPayments);
+    await persistTotals(nextPayments);
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    const paymentToDelete = payments.find(p => p.id === paymentId);
+    if (!paymentToDelete || deletingPaymentId) return;
+
+    setDeletingPaymentId(paymentId);
+    try {
+      // Delete the row first: if it fails, nothing is recalculated and the list stays honest.
+      await ReservationsService.deletePayment(paymentId);
+      const nextPayments = payments.filter(p => p.id !== paymentId);
+      setPayments(nextPayments);
+      await persistTotals(nextPayments);
+    } catch (err: any) {
+      console.error('❌ Error deleting payment:', err);
+      alert(
+        (lang === 'fr'
+          ? 'Échec de la suppression du paiement : '
+          : 'فشل حذف الدفعة: ') + (err?.message || err)
+      );
+    } finally {
+      setDeletingPaymentId(null);
+    }
   };
 
   const handlePrintPayment = (payment: Payment) => {
@@ -128,9 +196,9 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
                '⏳ En attente'}
             </span>
             <div className="text-sm text-saas-text-muted">
-              <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {reservation.totalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {reservation.advancePayment.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {reservation.remainingPayment.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {totalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {totalPaid.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {remaining.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
             </div>
           </div>
 
@@ -185,7 +253,20 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
 
         <div className="p-6">
           {activeTab === 'overview' && <OverviewTab lang={lang} reservation={reservation} />}
-          {activeTab === 'payments' && <PaymentsTab lang={lang} reservation={reservation} onAddPayment={handleAddPayment} onDeletePayment={handleDeletePayment} onPrintPayment={handlePrintPayment} />}
+          {activeTab === 'payments' && (
+            <PaymentsTab
+              lang={lang}
+              reservation={reservation}
+              payments={payments}
+              initialAdvance={initialAdvance}
+              totalPaid={totalPaid}
+              remaining={remaining}
+              deletingPaymentId={deletingPaymentId}
+              onAddPayment={handleAddPayment}
+              onDeletePayment={handleDeletePayment}
+              onPrintPayment={handlePrintPayment}
+            />
+          )}
           {activeTab === 'financial' && <FinancialTab lang={lang} reservation={reservation} />}
         </div>
       </div>
@@ -193,7 +274,7 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
       {/* Modals */}
       <AnimatePresence>
         {showPaymentModal && (
-          <PaymentModal lang={lang} reservation={reservation} onClose={() => setShowPaymentModal(false)} onAddPayment={handleSavePayment} />
+          <PaymentModal lang={lang} remaining={remaining} onClose={() => setShowPaymentModal(false)} onAddPayment={handleSavePayment} />
         )}
         {showActivationModal && (
           <ActivationModal lang={lang} reservation={reservation} onClose={() => setShowActivationModal(false)} onActivate={onUpdate} />
@@ -321,19 +402,34 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
 );
 
 // Payments Tab Component
-const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; onAddPayment: () => void; onDeletePayment: (id: string) => void; onPrintPayment: (payment: Payment) => void }> = ({ lang, reservation, onAddPayment, onDeletePayment, onPrintPayment }) => {
+const PaymentsTab: React.FC<{
+  lang: Language;
+  reservation: ReservationDetails;
+  payments: Payment[];
+  initialAdvance: number;
+  totalPaid: number;
+  remaining: number;
+  deletingPaymentId: string | null;
+  onAddPayment: () => void;
+  onDeletePayment: (id: string) => void;
+  onPrintPayment: (payment: Payment) => void;
+}> = ({ lang, reservation, payments, initialAdvance, totalPaid, remaining, deletingPaymentId, onAddPayment, onDeletePayment, onPrintPayment }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
-  // Include initial advance payment if not already in payments
-  const allPayments = [
-    ...(reservation.advancePayment > 0 && !reservation.payments.some(p => p.amount === reservation.advancePayment) ? [{
+  // The advance taken at creation has no row in the payments table: show it as a
+  // read-only first line so the history always adds up to « Montant Payé ».
+  const allPayments: (Payment & { isInitial?: boolean })[] = [
+    ...(initialAdvance > 0 ? [{
       id: 'initial',
-      amount: reservation.advancePayment,
+      isInitial: true,
+      reservationId: reservation.id,
+      amount: initialAdvance,
       method: 'cash' as const,
       date: reservation.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+      createdAt: reservation.createdAt || '',
       note: lang === 'fr' ? 'Paiement initial' : 'الدفعة الأولية'
     }] : []),
-    ...reservation.payments
+    ...payments
   ];
 
   const handleDeleteClick = (paymentId: string) => {
@@ -357,15 +453,15 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center border border-saas-border">
           <p className="text-sm text-saas-text-muted">{lang === 'fr' ? 'Montant Total' : 'المبلغ الإجمالي'}</p>
-          <p className="text-2xl font-black text-saas-text-main">{reservation.totalPrice.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-saas-text-main">{(Number(reservation.totalPrice) || 0).toLocaleString()} DA</p>
         </div>
         <div className="bg-green-50 rounded-lg p-4 text-center border border-green-200">
           <p className="text-sm text-green-700">{lang === 'fr' ? 'Montant Payé' : 'المبلغ المدفوع'}</p>
-          <p className="text-2xl font-black text-green-700">{reservation.advancePayment.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-green-700">{totalPaid.toLocaleString()} DA</p>
         </div>
         <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-200">
           <p className="text-sm text-orange-700">{lang === 'fr' ? 'Reste à Payer' : 'المبلغ المتبقي'}</p>
-          <p className="text-2xl font-black text-orange-700">{reservation.remainingPayment.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-orange-700">{remaining.toLocaleString()} DA</p>
         </div>
         <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
           {typeof reservation.cautionEnabled === 'undefined' || reservation.cautionEnabled ? (
@@ -443,13 +539,16 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
                   >
                     <Printer className="w-4 h-4" />
                   </button>
-                  {payment.id !== 'initial' && (
+                  {!payment.isInitial && (
                     <button
                       onClick={() => handleDeleteClick(payment.id)}
-                      className="p-2 text-red-600 hover:text-red-800 transition-colors"
+                      disabled={deletingPaymentId !== null}
+                      className="p-2 text-red-600 hover:text-red-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       title={lang === 'fr' ? 'Supprimer' : 'حذف'}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {deletingPaymentId === payment.id
+                        ? <span className="inline-block w-4 h-4 text-xs animate-spin">⏳</span>
+                        : <Trash2 className="w-4 h-4" />}
                     </button>
                   )}
                 </div>
@@ -482,7 +581,9 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
             ⚠️ {lang === 'fr' ? 'Confirmer la Suppression' : 'تأكيد الحذف'}
           </h3>
           <p className="text-saas-text-muted mb-6">
-            {lang === 'fr' ? 'Êtes-vous sûr de vouloir supprimer ce paiement ?' : 'هل أنت متأكد من حذف هذه الدفعة؟'}
+            {lang === 'fr'
+              ? 'Êtes-vous sûr de vouloir supprimer ce paiement ? Le montant payé et le reste à payer seront recalculés.'
+              : 'هل أنت متأكد من حذف هذه الدفعة؟ سيتم إعادة حساب المبلغ المدفوع والمبلغ المتبقي.'}
           </p>
           <div className="flex gap-3">
             <button
@@ -634,29 +735,34 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
 );
 
 // Modal Components
-const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onAddPayment: (payment: Payment) => void }> = ({ lang, reservation, onClose, onAddPayment }) => {
+const PaymentModal: React.FC<{ lang: Language; remaining: number; onClose: () => void; onAddPayment: (input: NewPaymentInput) => Promise<void> }> = ({ lang, remaining, onClose, onAddPayment }) => {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const paymentAmount = parseFloat(amount) || 0;
-  const newRemaining = Math.max(0, reservation.remainingPayment - paymentAmount);
+  // Never let a payment exceed what is still owed, so the totals can't drift.
+  const paymentAmount = Math.max(0, Math.min(parseFloat(amount) || 0, remaining));
+  const newRemaining = Math.max(0, remaining - paymentAmount);
 
-  const handleSave = () => {
-    if (paymentAmount <= 0) return;
-    
-    const newPayment: Payment = {
-      id: `payment-${Date.now()}`,
-      reservationId: reservation.id,
-      amount: paymentAmount,
-      method,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-      note: note || undefined
-    };
+  const handleSave = async () => {
+    if (paymentAmount <= 0 || isSaving) return;
 
-    onAddPayment(newPayment);
-    onClose();
+    setIsSaving(true);
+    try {
+      await onAddPayment({ amount: paymentAmount, method, note: note || undefined });
+      onClose();
+    } catch (err: any) {
+      // Keep the modal open so the user can retry without retyping.
+      console.error('❌ Error saving payment:', err);
+      alert(
+        (lang === 'fr'
+          ? "Échec de l'enregistrement du paiement : "
+          : 'فشل تسجيل الدفعة: ') + (err?.message || err)
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -680,7 +786,7 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
           <div className="bg-gradient-to-r from-saas-primary-start/10 to-saas-primary-end/10 rounded-xl p-4 border border-saas-primary-start/20">
             <div className="flex justify-between items-center mb-2">
               <span className="font-bold text-saas-text-main">{lang === 'fr' ? 'Reste à payer:' : 'المبلغ المتبقي:'}</span>
-              <span className="font-black text-saas-text-main">{reservation.remainingPayment.toLocaleString()} DA</span>
+              <span className="font-black text-saas-text-main">{remaining.toLocaleString()} DA</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="font-bold text-saas-text-main">{lang === 'fr' ? 'Après paiement:' : 'بعد الدفع:'}</span>
@@ -699,7 +805,7 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
               className="w-full p-3 border border-saas-border rounded-lg focus:ring-2 focus:ring-saas-primary-start focus:border-transparent"
               placeholder="0"
               min="0"
-              max={reservation.remainingPayment}
+              max={remaining}
             />
           </div>
 
@@ -735,16 +841,19 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 bg-saas-bg hover:bg-saas-secondary-start/10 text-saas-text-muted font-bold py-3 px-4 rounded-lg border border-saas-border hover:border-saas-secondary-start/20 transition-all"
+            disabled={isSaving}
+            className="flex-1 bg-saas-bg hover:bg-saas-secondary-start/10 text-saas-text-muted font-bold py-3 px-4 rounded-lg border border-saas-border hover:border-saas-secondary-start/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {lang === 'fr' ? 'Annuler' : 'إلغاء'}
           </button>
           <button
             onClick={handleSave}
-            disabled={paymentAmount <= 0}
+            disabled={paymentAmount <= 0 || isSaving}
             className="flex-1 btn-saas-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            💾 {lang === 'fr' ? 'Enregistrer' : 'حفظ'}
+            {isSaving
+              ? <>⏳ {lang === 'fr' ? 'Enregistrement...' : 'جاري الحفظ...'}</>
+              : <>💾 {lang === 'fr' ? 'Enregistrer' : 'حفظ'}</>}
           </button>
         </div>
       </motion.div>

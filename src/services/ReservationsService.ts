@@ -1079,12 +1079,27 @@ export class ReservationsService {
   }
 
   static async deletePayment(paymentId: string): Promise<void> {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('payments')
       .delete()
-      .eq('id', paymentId);
+      .eq('id', paymentId)
+      .select('id');
 
     if (error) throw error;
+
+    // A delete blocked by RLS deletes 0 row without raising: make sure the row is really
+    // gone, otherwise the caller would recompute the totals against a payment still stored.
+    if (!data || data.length === 0) {
+      const { data: stillThere } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('id', paymentId)
+        .maybeSingle();
+
+      if (stillThere) {
+        throw new Error(`Le paiement ${paymentId} n'a pas pu être supprimé (permissions insuffisantes).`);
+      }
+    }
   }
 
   // ========== PHOTO UPLOAD UTILITIES ==========
