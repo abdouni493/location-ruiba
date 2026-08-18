@@ -2320,8 +2320,10 @@ export const PersonalizationModal: React.FC<{
       conditions: isFrench ? 'Conditions Acceptées' : 'الشروط المقبولة',
       signatures: isFrench ? 'Signatures' : 'التوقيعات',
       clientSignature: isFrench ? 'Signature du Client' : 'توقيع العميل',
-      agencySignature: isFrench ? "Signature de l'Agence" : 'توقيع الوكالة',
+      agencySignature: isFrench ? "Cachet et Signature de l'Agence" : 'ختم و توقيع الوكالة',
       dateAndSignature: isFrench ? 'Date et signature' : 'التاريخ والتوقيع',
+      doneAt: isFrench ? 'Fait à' : 'حرر في',
+      on: isFrench ? 'le' : 'بتاريخ',
       statement: isFrench ? 'Déclaration du Locataire' : 'إقرار المستأجر',
       specialConditions: isFrench ? 'Conditions Spéciales' : 'الشروط الخاصة',
     };
@@ -2353,8 +2355,15 @@ export const PersonalizationModal: React.FC<{
      * so the whole template is rendered at a uniform reduced scale instead of a different,
      * cramped layout — same proportions, same page frame, same signature placement, just
      * smaller, so it still prints on one A4 sheet.
+     *
+     * The French text (formal serif font, longer wording) renders noticeably taller than the
+     * Arabic version, so the French template gets an extra down-scale. Together with the
+     * French-specific print rules below (no upscaling), this keeps the whole contract —
+     * statement, special conditions AND the signature/cachet block — on a single A4 page
+     * instead of pushing the bottom off the sheet.
      */
-    const contentScale = hasSecondConductor ? 0.87 : 1;
+    const frenchScale = isFrench ? 0.9 : 1;
+    const contentScale = (hasSecondConductor ? 0.87 : 1) * frenchScale;
     const px = (n: number): string => `${Math.round(n * contentScale * 100) / 100}px`;
     const baseFontSize = 18;
     const carImageUrl = reservation?.car?.images?.[0] || '';
@@ -2716,6 +2725,12 @@ export const PersonalizationModal: React.FC<{
           color: #666;
           margin-top: 1px;
         }
+        .sign-place {
+          font-size: ${px(13)};
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: ${px(4)};
+        }
         /* =============================================================
            PRINT STYLES - FIXES FOR A4 CENTERED LAYOUT
            Issues fixed:
@@ -2755,16 +2770,18 @@ export const PersonalizationModal: React.FC<{
              so both variants fill the same sheet and print at the same size. */
           .page {
             margin: 0 auto;
-            padding: 10mm;
-            width: 190mm;
-            min-height: 277mm;
-            height: auto;
             box-sizing: border-box;
             border: 2px solid black;
             left: 0;
             right: 0;
-            transform: scale(1.15);
-            transform-origin: top center;
+            /* French: full-width A4 with NO upscaling. The French content is taller than the
+               Arabic version, so the previous scale(1.15) pushed the signature/cachet block
+               off the bottom of the sheet (it was clipped by body overflow:hidden). Rendering
+               it at natural size on a real A4 page keeps the whole contract on one sheet.
+               Arabic: keep the original slight upscale that fills the page nicely. */
+            ${isFrench
+              ? 'padding: 8mm 10mm; width: 200mm; min-height: 292mm; height: auto; transform: none;'
+              : 'padding: 10mm; width: 190mm; min-height: 277mm; height: auto; transform: scale(1.15); transform-origin: top center;'}
           }
           
           /* Ensure proper box sizing */
@@ -2954,7 +2971,24 @@ export const PersonalizationModal: React.FC<{
           </div>
         </div>
 
-        <!-- Signatures -->
+        <!-- Signatures & cachet -->
+        ${isFrench ? `
+        <div style="margin-top: ${px(6)}; padding-top: ${px(8)}; border-top: 2px solid #1a3a8a;">
+          <div class="sign-place">${labels.doneAt} .............................. , ${labels.on} ${new Date().toLocaleDateString('fr-FR')}</div>
+          <div class="signatures" style="margin-top: ${px(4)};">
+            <div class="signature-block">
+              <div class="signature-line" style="height: ${px(45)};"></div>
+              <div class="signature-label">${labels.clientSignature}</div>
+              <div class="date-sig">${labels.dateAndSignature}</div>
+            </div>
+            <div class="signature-block">
+              <div class="signature-line" style="height: ${px(45)};"></div>
+              <div class="signature-label">${labels.agencySignature}</div>
+              <div class="date-sig">${labels.dateAndSignature}</div>
+            </div>
+          </div>
+        </div>
+        ` : `
         <div class="signatures" style="padding-top: ${px(10)}; border-top: 2px solid #1a3a8a;">
           <div class="signature-block">
             <div class="signature-line"></div>
@@ -2967,6 +3001,7 @@ export const PersonalizationModal: React.FC<{
             <div class="date-sig">${labels.dateAndSignature}</div>
           </div>
         </div>
+        `}
       </div>
     </body>
     </html>
