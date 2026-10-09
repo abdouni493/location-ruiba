@@ -6,6 +6,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { DocumentTemplateEditor } from './DocumentTemplateEditor';
 import { DocumentRenderer } from './DocumentRenderer';
 
+import { formatDateDMY } from '../utils/dateFormat';
 interface BillingPageProps {
   lang: Language;
 }
@@ -178,7 +179,7 @@ const InvoiceCard: React.FC<InvoiceCardProps> = ({ invoice, lang, onViewDetails,
             <span className="text-xl">📅</span>
             <div>
               <p className="font-bold text-slate-800 text-sm">
-                {new Date(invoice.date).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ')}
+                {formatDateDMY(invoice.date)}
               </p>
               <p className="text-xs text-slate-600 uppercase tracking-widest">
                 {lang === 'fr' ? 'Date' : 'التاريخ'}
@@ -668,7 +669,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ lang }) => {
                         {lang === 'fr' ? 'Date' : 'التاريخ'}
                       </p>
                       <p className="text-purple-800 font-bold">
-                        {new Date(selectedInvoice.date).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ')}
+                        {formatDateDMY(selectedInvoice.date)}
                       </p>
                     </div>
                     <div>
@@ -760,7 +761,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ lang }) => {
                               {payment.amount.toLocaleString()} DZD
                             </p>
                             <p className="text-sm text-amber-600">
-                              {new Date(payment.date).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ')}
+                              {formatDateDMY(payment.date)}
                             </p>
                           </div>
                         </div>
@@ -784,7 +785,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ lang }) => {
             {/* Footer */}
             <div className="bg-slate-50 p-6 border-t border-slate-200 flex justify-between items-center">
               <div className="text-sm text-slate-600">
-                {lang === 'fr' ? 'Créée le:' : 'تم الإنشاء في:'} {new Date(selectedInvoice.createdAt).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ')}
+                {lang === 'fr' ? 'Créée le:' : 'تم الإنشاء في:'} {formatDateDMY(selectedInvoice.createdAt)}
               </div>
               <div className="flex gap-3">
                 <motion.button

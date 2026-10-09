@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Printer, Download, Edit2, Copy, ChevronRight, Save } from 'lucide-react';
 import { supabase } from '../supabase';
 
+import { formatDateDMY } from '../utils/dateFormat';
 interface ContractTemplate {
   id: string;
   name: string;
@@ -403,7 +404,7 @@ export const ContractTemplates: React.FC<ContractTemplatesProps> = ({
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return '';
     try {
-      return new Date(dateStr).toLocaleDateString('fr-FR');
+      return formatDateDMY(dateStr);
     } catch {
       return String(dateStr);
     }

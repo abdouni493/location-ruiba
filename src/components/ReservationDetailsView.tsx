@@ -6,6 +6,7 @@ import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
 import { normalizePayment, sortPaymentsByDate, sumPayments } from '../utils/paymentTotals';
+import { formatDateDMY } from '../utils/dateFormat';
 
 interface ReservationDetailsViewProps {
   lang: Language;
@@ -38,7 +39,10 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
   }, [reservation.id, reservation.payments]);
 
   // The advance recorded at creation is not a payment row: it is counted on its own.
-  const initialAdvance = Number(reservation.advancePayment) || 0;
+  const [initialAdvance, setInitialAdvance] = useState<number>(Number(reservation.advancePayment) || 0);
+  useEffect(() => {
+    setInitialAdvance(Number(reservation.advancePayment) || 0);
+  }, [reservation.id, reservation.advancePayment]);
   const totalPrice = Number(reservation.totalPrice) || 0;
   const totalPaid = initialAdvance + sumPayments(payments);
   const remaining = Math.max(0, totalPrice - totalPaid);
@@ -48,18 +52,19 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
   };
 
   /** Persists the reservation totals after the payments list changed. */
-  const persistTotals = async (nextPayments: Payment[]) => {
-    const nextRemaining = Math.max(0, totalPrice - (initialAdvance + sumPayments(nextPayments)));
+  const persistTotals = async (nextPayments: Payment[], advance: number = initialAdvance) => {
+    const nextRemaining = Math.max(0, totalPrice - (advance + sumPayments(nextPayments)));
     const updatedReservation = {
       ...reservation,
       payments: nextPayments,
+      advancePayment: advance,
       remainingPayment: nextRemaining,
     };
 
     if (onUpdate) {
       await onUpdate(updatedReservation);
     } else {
-      await ReservationsService.updateReservation(reservation.id, { remainingPayment: nextRemaining });
+      await ReservationsService.updateReservation(reservation.id, { advancePayment: advance, remainingPayment: nextRemaining });
     }
   };
 
@@ -92,6 +97,29 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
   };
 
   const handleDeletePayment = async (paymentId: string) => {
+    if (paymentId === 'initial') {
+      // The initial advance lives on the reservation itself: clear it there.
+      if (deletingPaymentId) return;
+      setDeletingPaymentId(paymentId);
+      try {
+        await ReservationsService.updateReservation(reservation.id, {
+          advancePayment: 0,
+          remainingPayment: Math.max(0, totalPrice - sumPayments(payments)),
+        });
+        setInitialAdvance(0);
+        await persistTotals(payments, 0);
+      } catch (err: any) {
+        console.error('❌ Error deleting initial payment:', err);
+        alert(
+          (lang === 'fr'
+            ? 'Échec de la suppression du paiement : '
+            : 'فشل حذف الدفعة: ') + (err?.message || err)
+        );
+      } finally {
+        setDeletingPaymentId(null);
+      }
+      return;
+    }
     const paymentToDelete = payments.find(p => p.id === paymentId);
     if (!paymentToDelete || deletingPaymentId) return;
 
@@ -301,7 +329,7 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
             <MapPin className="w-8 h-8 text-blue-600" />
           </div>
           <p className="font-bold text-slate-900">{lang === 'fr' ? 'Départ' : 'المغادرة'}</p>
-          <p className="text-sm text-slate-600">{reservation.step1.departureDate}</p>
+          <p className="text-sm text-slate-600">{formatDateDMY(reservation.step1.departureDate)}</p>
           <p className="text-sm text-slate-600">{reservation.step1.departureTime}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -326,7 +354,7 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
             <MapPin className="w-8 h-8 text-purple-600" />
           </div>
           <p className="font-bold text-slate-900">{lang === 'fr' ? 'Retour' : 'العودة'}</p>
-          <p className="text-sm text-slate-600">{reservation.step1.returnDate}</p>
+          <p className="text-sm text-slate-600">{formatDateDMY(reservation.step1.returnDate)}</p>
           <p className="text-sm text-slate-600">{reservation.step1.returnTime}</p>
         </div>
       </div>
@@ -361,7 +389,7 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
             </div>
             <div>
               <p className="font-bold text-slate-900">🎂 {lang === 'fr' ? 'Naissance' : 'الميلاد'}</p>
-              <p className="text-slate-600">{reservation.client.dateOfBirth || 'N/A'}</p>
+              <p className="text-slate-600">{reservation.client.dateOfBirth ? formatDateDMY(reservation.client.dateOfBirth) : 'N/A'}</p>
             </div>
           </div>
         </div>
@@ -527,7 +555,7 @@ const PaymentsTab: React.FC<{
                   </div>
                   <div>
                     <p className="font-bold text-saas-text-main">{payment.amount.toLocaleString()} DA</p>
-                    <p className="text-sm text-saas-text-muted">{payment.date} • {payment.method === 'cash' ? (lang === 'fr' ? 'Espèces' : 'نقدي') : payment.method === 'card' ? (lang === 'fr' ? 'Carte' : 'بطاقة') : (lang === 'fr' ? 'Virement' : 'تحويل')}</p>
+                    <p className="text-sm text-saas-text-muted">{formatDateDMY(payment.date)} • {payment.method === 'cash' ? (lang === 'fr' ? 'Espèces' : 'نقدي') : payment.method === 'card' ? (lang === 'fr' ? 'Carte' : 'بطاقة') : (lang === 'fr' ? 'Virement' : 'تحويل')}</p>
                     {payment.note && <p className="text-xs text-saas-text-muted">{payment.note}</p>}
                   </div>
                 </div>
@@ -539,7 +567,7 @@ const PaymentsTab: React.FC<{
                   >
                     <Printer className="w-4 h-4" />
                   </button>
-                  {!payment.isInitial && (
+                  {(
                     <button
                       onClick={() => handleDeleteClick(payment.id)}
                       disabled={deletingPaymentId !== null}
@@ -1275,7 +1303,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h5 className="font-bold text-purple-900 mb-2">{lang === 'fr' ? 'Départ' : 'المغادرة'}</h5>
-                <p className="text-purple-800">{reservation.step1.departureDate} à {reservation.step1.departureTime}</p>
+                <p className="text-purple-800">{formatDateDMY(reservation.step1.departureDate)} à {reservation.step1.departureTime}</p>
               </div>
               <div>
                 <h5 className="font-bold text-purple-900 mb-2 flex items-center gap-2">

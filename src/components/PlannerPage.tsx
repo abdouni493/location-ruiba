@@ -16,6 +16,7 @@ import { supabase } from '../supabase';
 import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
 import { getRemaining, getTotalPaid } from '../utils/paymentTotals';
 
+import { formatDateDMY } from '../utils/dateFormat';
 /**
  * Force a phone number (or any latin/number string) to render strictly left-to-right,
  * even inside an RTL (Arabic) document, so it prints in the same order as the French layout.
@@ -326,7 +327,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Date:' : 'التاريخ:'}</span>
-            <span>${new Date().toLocaleDateString('fr-FR')}</span>
+            <span>${formatDateDMY(new Date())}</span>
           </div>
         </div>
         
@@ -1348,13 +1349,13 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       ...baseElements,
       title: { x: 200, y: 50, text: lang === 'fr' ? 'payement' : 'إيصال الدفع', fontSize: 24, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'center', backgroundColor: 'transparent' },
       receiptNumber: { x: 50, y: 150, text: `N° ${reservation.id}`, fontSize: 14, fontFamily: 'Arial', color: '#333333', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      receiptDate: { x: 50, y: 180, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${new Date().toLocaleDateString('fr-FR')}`, fontSize: 14, fontFamily: 'Arial', color: '#333333', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      receiptDate: { x: 50, y: 180, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${formatDateDMY(new Date())}`, fontSize: 14, fontFamily: 'Arial', color: '#333333', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       clientLabel: { x: 50, y: 220, text: lang === 'fr' ? 'Client:' : 'العميل:', fontSize: 14, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       clientName: { x: 150, y: 220, text: `${reservation.client.firstName} ${reservation.client.lastName}`, fontSize: 14, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       clientPhone: { x: 50, y: 245, text: `${lang === 'fr' ? 'Téléphone:' : 'الهاتف:'} ${reservation.client.phone}`, fontSize: 12, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       carLabel: { x: 50, y: 280, text: lang === 'fr' ? 'Véhicule:' : 'المركبة:', fontSize: 14, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       carInfo: { x: 50, y: 305, text: `${reservation.car.brand} ${reservation.car.model} - ${reservation.car.registration}`, fontSize: 13, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      rentalPeriod: { x: 50, y: 330, text: `${lang === 'fr' ? 'Période:' : 'الفترة:'} ${reservation.step1.departureDate} ${lang === 'fr' ? 'au' : 'إلى'} ${reservation.step1.returnDate}`, fontSize: 13, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      rentalPeriod: { x: 50, y: 330, text: `${lang === 'fr' ? 'Période:' : 'الفترة:'} ${formatDateDMY(reservation.step1.departureDate)} ${lang === 'fr' ? 'au' : 'إلى'} ${formatDateDMY(reservation.step1.returnDate)}`, fontSize: 13, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       totalLabel: { x: 50, y: 380, text: lang === 'fr' ? 'Total:' : 'الإجمالي:', fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       totalAmount: { x: 200, y: 380, text: `${reservation.totalPrice.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}`, fontSize: 16, fontFamily: 'Arial', color: '#0066cc', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       paidLabel: { x: 50, y: 410, text: lang === 'fr' ? 'Montant payé:' : 'المبلغ المدفوع:', fontSize: 14, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
@@ -1375,7 +1376,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       ...baseElements,
       title: { x: 200, y: 70, text: lang === 'fr' ? 'FACTURE' : 'الفاتورة', fontSize: 26, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'center', backgroundColor: 'transparent' },
       invoiceNumber: { x: 50, y: 165, text: `${lang === 'fr' ? 'N° Facture:' : 'رقم الفاتورة:'} ${reservation.id}`, fontSize: 13, fontFamily: 'Arial', color: '#333333', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      invoiceDate: { x: 300, y: 165, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${new Date().toLocaleDateString('fr-FR')}`, fontSize: 13, fontFamily: 'Arial', color: '#333333', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
+      invoiceDate: { x: 300, y: 165, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${formatDateDMY(new Date())}`, fontSize: 13, fontFamily: 'Arial', color: '#333333', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
       clientSectionTitle: { x: 50, y: 205, text: lang === 'fr' ? '👤 INFORMATIONS CLIENT' : '👤 معلومات العميل', fontSize: 14, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'underline', textAlign: 'left', backgroundColor: 'transparent' },
       clientNameLabel: { x: 50, y: 240, text: lang === 'fr' ? 'Nom:' : 'الاسم:', fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       clientName: { x: 130, y: 240, text: `${reservation.client.firstName} ${reservation.client.lastName}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
@@ -1389,7 +1390,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       vehicleRegLabel: { x: 50, y: 370, text: lang === 'fr' ? 'Immatriculation:' : 'رقم التسجيل:', fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       vehicleReg: { x: 180, y: 370, text: reservation.car.registration || 'N/A', fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       rentalPeriodLabel: { x: 50, y: 390, text: lang === 'fr' ? 'Période:' : 'الفترة:', fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      rentalPeriod: { x: 180, y: 390, text: `${reservation.step1.departureDate} ${lang === 'fr' ? 'au' : 'إلى'} ${reservation.step1.returnDate}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      rentalPeriod: { x: 180, y: 390, text: `${formatDateDMY(reservation.step1.departureDate)} ${lang === 'fr' ? 'au' : 'إلى'} ${formatDateDMY(reservation.step1.returnDate)}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       tarificationSectionTitle: { x: 50, y: 430, text: lang === 'fr' ? '📋 TARIFICATION' : '📋 التسعير', fontSize: 14, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'underline', textAlign: 'left', backgroundColor: 'transparent' },
       basePriceLabel: { x: 50, y: 465, text: lang === 'fr' ? 'Prix:' : 'السعر:', fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       basePrice: { x: 280, y: 465, text: `${subtotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
@@ -1413,7 +1414,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
 
       // Quote header with better styling - positioned below logo
       quoteNumber: { x: 50, y: 165, text: `${lang === 'fr' ? 'N° Devis:' : 'رقم عرض السعر:'} ${reservation.id}`, fontSize: 14, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      quoteDate: { x: 300, y: 165, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${new Date().toLocaleDateString('fr-FR')}`, fontSize: 13, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      quoteDate: { x: 300, y: 165, text: `${lang === 'fr' ? 'Date:' : 'التاريخ:'} ${formatDateDMY(new Date())}`, fontSize: 13, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
 
       // Vehicle Specifications Section - Blue theme
       vehicleSpecsTitle: { x: 50, y: 210, text: lang === 'fr' ? '🚗 SPÉCIFICATIONS DU VÉHICULE' : '🚗 مواصفات المركبة', fontSize: 13, fontFamily: 'Arial', color: '#FFFFFF', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: '#1a3a52', padding: '6px 8px' },
@@ -1455,7 +1456,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       numberOfDays: { x: 280, y: 518, text: `${reservation.totalDays} ${lang === 'fr' ? 'jour(s)' : 'يوم'}`, fontSize: 12, fontFamily: 'Arial', color: '#2d7a4d', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
       
       rentalPeriodLabel: { x: 50, y: 541, text: lang === 'fr' ? 'Période:' : 'الفترة:', fontSize: 12, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      rentalPeriod: { x: 280, y: 541, text: `${reservation.step1.departureDate} → ${reservation.step1.returnDate}`, fontSize: 11, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
+      rentalPeriod: { x: 280, y: 541, text: `${formatDateDMY(reservation.step1.departureDate)} → ${formatDateDMY(reservation.step1.returnDate)}`, fontSize: 11, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
       
       totalHTLabel: { x: 50, y: 570, text: lang === 'fr' ? 'Sous-Total:' : 'الإجمالي الجزئي:', fontSize: 13, fontFamily: 'Arial', color: '#1a3a52', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       totalHT: { x: 280, y: 570, text: `${reservation.totalPrice.toLocaleString()} DA`, fontSize: 13, fontFamily: 'Arial', color: '#2d7a4d', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'right', backgroundColor: 'transparent' },
@@ -1484,7 +1485,7 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       title: { x: 50, y: 160, text: 'Contrat de Location / عقد الإيجار', fontSize: 22, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'center', backgroundColor: 'transparent' },
       client_name: { x: 80, y: 140, text: `${reservation.client.firstName} ${reservation.client.lastName}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       car_model: { x: 80, y: 180, text: `${reservation.car.brand} ${reservation.car.model}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      rental_dates: { x: 80, y: 220, text: `${reservation.step1.departureDate} - ${reservation.step1.returnDate}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      rental_dates: { x: 80, y: 220, text: `${formatDateDMY(reservation.step1.departureDate)} - ${formatDateDMY(reservation.step1.returnDate)}`, fontSize: 12, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       price_total: { x: 80, y: 260, text: `${reservation.totalPrice.toLocaleString()} DA`, fontSize: 14, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       signature_line: { x: 80, y: 450, text: '_________________________________', fontSize: 10, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
     };
@@ -1509,13 +1510,13 @@ const getInitialElements = (type: string, reservation: ReservationDetails, lang:
       introText: { x: 50, y: 150, text: 'Je soussigne[e] Mrs/Mme:', fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       clientName: { x: 250, y: 150, text: `${reservation.client.firstName} ${reservation.client.lastName}`, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'bold', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       passportText: { x: 50, y: 200, text: documentText, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      passportNumber: { x: 50, y: 250, text: `N° ${documentNumber} Délivré le ${documentDeliveryDate ? new Date(documentDeliveryDate).toLocaleDateString('fr-FR') : 'N/A'} A ${documentDeliveryPlace || 'N/A'}`, fontSize: 14, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      passportNumber: { x: 50, y: 250, text: `N° ${documentNumber} Délivré le ${documentDeliveryDate ? formatDateDMY(documentDeliveryDate) : 'N/A'} A ${documentDeliveryPlace || 'N/A'}`, fontSize: 14, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       agenceText: { x: 50, y: 300, text: 'Au niveau de votre agence de location de voiture le', fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      currentDate: { x: 50, y: 350, text: new Date().toLocaleDateString('fr-FR'), fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      currentDate: { x: 50, y: 350, text: formatDateDMY(new Date()), fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       contractText: { x: 50, y: 400, text: `Contrat N° ${reservation.id}`, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       cautionText: { x: 50, y: 450, text: 'Comme caution pour location du véhicule', fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       carInfo: { x: 50, y: 500, text: `Marque ${reservation.car.brand} ${reservation.car.model} Immatric ${reservation.car.registration}`, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
-      datesText: { x: 50, y: 550, text: `Du ${new Date(reservation.step1.departureDate).toLocaleDateString('fr-FR')} Au ${new Date(reservation.step1.returnDate).toLocaleDateString('fr-FR')}`, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
+      datesText: { x: 50, y: 550, text: `Du ${formatDateDMY(reservation.step1.departureDate)} Au ${formatDateDMY(reservation.step1.returnDate)}`, fontSize: 16, fontFamily: 'Arial', color: '#000000', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       signatureText1: { x: 50, y: 600, text: 'Signature et cachet de l\'Agence', fontSize: 14, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' },
       signatureText2: { x: 300, y: 600, text: 'Signature de client', fontSize: 14, fontFamily: 'Arial', color: '#666666', fontWeight: 'normal', fontStyle: 'normal', textDecoration: 'none', textAlign: 'left', backgroundColor: 'transparent' }
     };
@@ -2824,7 +2825,7 @@ export const PersonalizationModal: React.FC<{
           <tbody>
             <tr>
               <td class="it-label">${labels.contractDate}</td>
-              <td class="it-value">${new Date().toLocaleDateString('en-US')}</td>
+              <td class="it-value">${formatDateDMY(new Date())}</td>
               <td class="it-label">${labels.contractNumber}</td>
               <td class="it-value">${contractNo}</td>
               <td class="it-label">${labels.createdBy}</td>
@@ -2835,9 +2836,9 @@ export const PersonalizationModal: React.FC<{
             </tr>
             <tr>
               <td class="it-label">${labels.departure}</td>
-              <td class="it-value">${new Date(reservation?.step1?.departureDate).toLocaleDateString('fr-FR')}</td>
+              <td class="it-value">${formatDateDMY(reservation?.step1?.departureDate)}</td>
               <td class="it-label">${labels.return}</td>
-              <td class="it-value">${new Date(reservation?.step1?.returnDate).toLocaleDateString('fr-FR')}</td>
+              <td class="it-value">${formatDateDMY(reservation?.step1?.returnDate)}</td>
               <td class="it-label">${labels.duration}</td>
               <td class="it-value">${reservation?.totalDays || 0} ${labels.days}</td>
             </tr>
@@ -2856,7 +2857,7 @@ export const PersonalizationModal: React.FC<{
               </div>
               <div class="field">
                 <div class="field-label">${labels.birthDate}</div>
-                <div class="field-value">${new Date(reservation?.client?.dateOfBirth).toLocaleDateString('fr-FR')}</div>
+                <div class="field-value">${formatDateDMY(reservation?.client?.dateOfBirth)}</div>
               </div>
               <div class="field">
                 <div class="field-label">${labels.birthPlace}</div>
@@ -2868,11 +2869,11 @@ export const PersonalizationModal: React.FC<{
               </div>
               <div class="field">
                 <div class="field-label">${labels.licenseDeliveryDate}</div>
-                <div class="field-value">${reservation?.client?.licenseDeliveryDate ? new Date(reservation.client.licenseDeliveryDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
+                <div class="field-value">${reservation?.client?.licenseDeliveryDate ? formatDateDMY(reservation.client.licenseDeliveryDate) : 'dd/mm/yyyy'}</div>
               </div>
               <div class="field">
                 <div class="field-label">${labels.licenseExpirationDate}</div>
-                <div class="field-value">${reservation?.client?.licenseExpirationDate ? new Date(reservation.client.licenseExpirationDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
+                <div class="field-value">${reservation?.client?.licenseExpirationDate ? formatDateDMY(reservation.client.licenseExpirationDate) : 'dd/mm/yyyy'}</div>
               </div>
               <div class="field">
                 <div class="field-label">${labels.licenseDeliveryPlace}</div>
@@ -2936,7 +2937,7 @@ export const PersonalizationModal: React.FC<{
             </div>
             <div class="field">
               <div class="field-label">${labels.birthDate}</div>
-              <div class="field-value">${(secondConductor?.date_of_birth || secondConductor?.dateOfBirth) ? new Date(secondConductor?.date_of_birth || secondConductor?.dateOfBirth).toLocaleDateString('en-US') : 'N/A'}</div>
+              <div class="field-value">${(secondConductor?.date_of_birth || secondConductor?.dateOfBirth) ? formatDateDMY(secondConductor?.date_of_birth || secondConductor?.dateOfBirth) : 'N/A'}</div>
             </div>
             <div class="field">
               <div class="field-label">${labels.birthPlace}</div>
@@ -2974,7 +2975,7 @@ export const PersonalizationModal: React.FC<{
         <!-- Signatures & cachet -->
         ${isFrench ? `
         <div style="margin-top: ${px(6)}; padding-top: ${px(8)}; border-top: 2px solid #1a3a8a;">
-          <div class="sign-place">${labels.doneAt} .............................. , ${labels.on} ${new Date().toLocaleDateString('fr-FR')}</div>
+          <div class="sign-place">${labels.doneAt} .............................. , ${labels.on} ${formatDateDMY(new Date())}</div>
           <div class="signatures" style="margin-top: ${px(4)};">
             <div class="signature-block">
               <div class="signature-line" style="height: ${px(45)};"></div>
@@ -3313,7 +3314,7 @@ export const PersonalizationModal: React.FC<{
           </div>
           <div class="info-box green">
             <div class="info-label">📅 ${labels.date}</div>
-            <div class="info-value">${new Date().toLocaleDateString('en-US')}</div>
+            <div class="info-value">${formatDateDMY(new Date())}</div>
           </div>
           <div class="info-box green">
             <div class="info-label">👤 ${labels.client}</div>
@@ -3531,7 +3532,7 @@ export const PersonalizationModal: React.FC<{
           </div>
           <div style="text-align:right;font-size:11px;color:#92400e;">
             <div style="font-weight:700;">N\u00b0 ${reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : '000'}</div>
-            <div>${new Date().toLocaleDateString('fr-FR')}</div>
+            <div>${formatDateDMY(new Date())}</div>
           </div>
         </div>
 
@@ -3890,7 +3891,7 @@ export const PersonalizationModal: React.FC<{
             </div>
             <div class="info-line">
               <span class="info-label">${labels.issuedOn}</span>
-              <span class="info-value">${documentDeliveryDate ? new Date(documentDeliveryDate).toLocaleDateString('en-US') : 'N/A'}</span>
+              <span class="info-value">${documentDeliveryDate ? formatDateDMY(documentDeliveryDate) : 'N/A'}</span>
             </div>
             <div class="info-line">
               <span class="info-label">${labels.atLocation}</span>
@@ -3900,7 +3901,7 @@ export const PersonalizationModal: React.FC<{
 
           <!-- Agency Section -->
           <div class="intro-line" style="margin-top: 15px;">
-            ${labels.atAgency} <span class="highlight">${new Date().toLocaleDateString('en-US')}</span>
+            ${labels.atAgency} <span class="highlight">${formatDateDMY(new Date())}</span>
           </div>
 
           <!-- Contract Number -->
@@ -4256,7 +4257,7 @@ export const PersonalizationModal: React.FC<{
           </div>
           <div class="info-box purple">
             <div class="info-label">📅 ${labels.date}</div>
-            <div class="info-value">${new Date().toLocaleDateString('en-US')}</div>
+            <div class="info-value">${formatDateDMY(new Date())}</div>
           </div>
           <div class="info-box purple">
             <div class="info-label">👤 ${labels.client}</div>
@@ -4675,7 +4676,7 @@ export const PersonalizationModal: React.FC<{
         <div class="header-info">
           <div class="info-box">
             <div class="info-label">📅 ${labels.inspectionDate}</div>
-            <div class="info-value">${new Date().toLocaleDateString('en-US')}</div>
+            <div class="info-value">${formatDateDMY(new Date())}</div>
           </div>
           <div class="info-box">
             <div class="info-label">🗂️ ${isFrench ? 'N° de Réservation' : 'رقم الحجز'}</div>

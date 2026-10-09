@@ -5,6 +5,7 @@ import { supabase } from '../supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Edit2, Plus, Trash2, RotateCcw, Save, X } from 'lucide-react';
 
+import { formatDateDMY } from '../utils/dateFormat';
 interface DocumentTemplateEditorProps {
   documentType: DocumentType;
   onClose: () => void;
@@ -225,18 +226,18 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
       title: `${documentType.toUpperCase()} de Location`,
       client_name: client ? `${client.first_name} ${client.last_name}` : 'Client Name',
       car_model: car ? `${car.brand} ${car.model} ${car.year} - ${car.color}` : 'Car Model',
-      rental_dates: reservation ? `${reservation.departure_date} - ${reservation.return_date}` : 'Dates',
+      rental_dates: reservation ? `${formatDateDMY(reservation.departure_date)} - ${formatDateDMY(reservation.return_date)}` : 'Dates',
       price_total: reservation ? `${reservation.total_price.toLocaleString()} DA` : 'Price',
       signature_line: '_________________________________',
       agenceName: agencySettings?.agency_name || 'Agency Name',
       quote_number: `DEVIS-${Date.now().toString().slice(-6)}`,
-      validity_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
+      validity_date: formatDateDMY(Date.now() + 30 * 24 * 60 * 60 * 1000),
       invoice_number: `FAC-${Date.now().toString().slice(-6)}`,
-      invoice_date: new Date().toLocaleDateString('fr-FR'),
+      invoice_date: formatDateDMY(new Date()),
       amount_due: reservation ? `${reservation.total_price.toLocaleString()} DA` : 'Amount',
       payment_terms: 'Net 30',
       receipt_number: `REC-${Date.now().toString().slice(-6)}`,
-      receipt_date: new Date().toLocaleDateString('fr-FR'),
+      receipt_date: formatDateDMY(new Date()),
       amount_paid: reservation ? `${reservation.total_price.toLocaleString()} DA` : 'Amount',
       payment_method: 'Virement Bancaire',
       mileage: inspection?.mileage?.toString() || '0',
