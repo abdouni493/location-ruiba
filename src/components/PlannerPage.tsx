@@ -403,6 +403,12 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   const isSearching = searchQuery.trim().length > 0;
 
+  // Reservations (cancelled excepted) that still owe money.
+  const debtReservations = reservations.filter(r =>
+    r.client && r.car && r.status !== 'cancelled' && getRemaining(r) > 0
+  );
+  const totalDebt = debtReservations.reduce((sum, r) => sum + getRemaining(r), 0);
+
   const filteredReservations = reservations.filter(reservation => {
     if (!reservation.client || !reservation.car) return false;
 
@@ -421,7 +427,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     // Hide completed ("Terminé") reservations from the default planner view.
     // They only surface when the user actively searches (client name / phone /
     // reservation id) or explicitly filters by the "Terminé" status.
-    if (reservation.status === 'completed' && !isSearching && filterStatus !== 'completed') {
+    if (reservation.status === 'completed' && !isSearching && filterStatus !== 'completed' && !filterDebtOnly) {
       return false;
     }
 
@@ -518,6 +524,31 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           {lang === 'fr' ? 'Gestion des réservations' : 'إدارة الحجوزات'}
         </p>
       </div>
+
+      {/* Debt alert */}
+      {debtReservations.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-red-50 border-2 border-red-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 shrink-0" />
+            <div>
+              <p className="font-black text-red-800">
+                {lang === 'fr'
+                  ? `${debtReservations.length} réservation(s) avec une dette non réglée`
+                  : `${debtReservations.length} حجز بدين غير مسدد`}
+              </p>
+              <p className="text-sm text-red-700">
+                {lang === 'fr' ? 'Total des dettes :' : 'إجمالي الديون:'} <span className="font-black">{totalDebt.toLocaleString()} DA</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { setFilterDebtOnly(true); setFilterStatus('all'); }}
+            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm"
+          >
+            {lang === 'fr' ? 'Voir les réservations endettées' : 'عرض الحجوزات المدينة'}
+          </button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">

@@ -5,7 +5,7 @@ import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, CreditCard, DollarSig
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
-import { normalizePayment, sortPaymentsByDate, sumPayments } from '../utils/paymentTotals';
+import { normalizePayment, sortPaymentsByDate, sumPayments, getRemaining } from '../utils/paymentTotals';
 import { formatDateDMY } from '../utils/dateFormat';
 
 interface ReservationDetailsViewProps {
@@ -1109,6 +1109,12 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Debt still owed on this rental: the user can settle all or part of it at closing.
+  const debt = getRemaining(reservation);
+  const [debtPayment, setDebtPayment] = useState('');
+  const [debtMethod, setDebtMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const debtPaid = Math.min(debt, Math.max(0, parseFloat(debtPayment) || 0));
+  const debtLeft = Math.max(0, debt - debtPaid);
 
   const totalDistance = returnMileage && reservation.car.mileage
     ? parseInt(returnMileage) - reservation.car.mileage
@@ -1133,8 +1139,34 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
         return;
       }
 
+      if ((parseFloat(debtPayment) || 0) > debt) {
+        setErrorMessage(lang === 'fr'
+          ? `Le montant payé dépasse la dette (${debt.toLocaleString()} DA)`
+          : `المبلغ المدفوع يتجاوز الدين (${debt.toLocaleString()} د.ج)`);
+        return;
+      }
+
       setErrorMessage(null);
       setIsLoading(true);
+
+      // Record the debt payment first so the closing reflects the real balance.
+      let newPayments = reservation.payments || [];
+      if (debtPaid > 0) {
+        const date = new Date().toISOString().split('T')[0];
+        const note = lang === 'fr' ? 'Paiement de la dette à la clôture' : 'تسديد الدين عند الإنهاء';
+        const { id } = await ReservationsService.addPayment({
+          reservationId: reservation.id,
+          amount: debtPaid,
+          paymentMethod: debtMethod,
+          date,
+          note,
+        });
+        newPayments = [...newPayments, {
+          id, reservationId: reservation.id, amount: debtPaid, method: debtMethod,
+          date, note, createdAt: new Date().toISOString(),
+        }];
+      }
+      await ReservationsService.updateReservation(reservation.id, { remainingPayment: debtLeft });
 
       console.log('🟢 Starting reservation completion for:', reservation.id);
 
@@ -1172,7 +1204,9 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
         excessMileage: parseFloat(excessMileage) || 0,
         missingFuel: 0,
         additionalFees: totalFees,
-        notes: notes
+        notes: notes,
+        payments: newPayments,
+        remainingPayment: debtLeft,
       };
 
       console.log('🟢 Reservation completed successfully');
@@ -1394,6 +1428,72 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
               </div>
             </div>
           </div>
+
+          {/* Debt */}
+          {debt > 0 ? (
+            <div className="bg-orange-50 rounded-2xl p-6 border-2 border-orange-300">
+              <div className="flex items-start gap-3 mb-4">
+                <AlertTriangle className="w-6 h-6 text-orange-600 shrink-0" />
+                <div>
+                  <h4 className="text-lg font-black text-orange-900">
+                    {lang === 'fr' ? 'Attention : dette non réglée' : 'تنبيه: دين غير مسدد'}
+                  </h4>
+                  <p className="text-orange-800">
+                    {lang === 'fr' ? 'Reste à payer :' : 'المبلغ المتبقي:'} <span className="font-black">{debt.toLocaleString()} DA</span>
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-bold text-orange-900 mb-2">
+                    {lang === 'fr' ? 'Montant payé maintenant' : 'المبلغ المدفوع الآن'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={debt}
+                    value={debtPayment}
+                    onChange={(e) => setDebtPayment(e.target.value)}
+                    className="w-full p-3 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDebtPayment(String(debt))}
+                    className="mt-2 text-xs font-bold text-orange-700 underline"
+                  >
+                    {lang === 'fr' ? 'Payer la totalité' : 'دفع المبلغ كاملا'}
+                  </button>
+                </div>
+                <div>
+                  <label className="block font-bold text-orange-900 mb-2">
+                    {lang === 'fr' ? 'Mode de paiement' : 'طريقة الدفع'}
+                  </label>
+                  <select
+                    value={debtMethod}
+                    onChange={(e) => setDebtMethod(e.target.value as any)}
+                    className="w-full p-3 border border-orange-200 rounded-lg"
+                  >
+                    <option value="cash">{lang === 'fr' ? 'Espèces' : 'نقدي'}</option>
+                    <option value="card">{lang === 'fr' ? 'Carte' : 'بطاقة'}</option>
+                    <option value="transfer">{lang === 'fr' ? 'Virement' : 'تحويل'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-orange-900 mb-2">
+                    {lang === 'fr' ? 'Dette restante après clôture' : 'الدين المتبقي بعد الإنهاء'}
+                  </label>
+                  <p className={`p-3 rounded-lg font-black ${debtLeft > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    {debtLeft.toLocaleString()} DA
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-green-50 rounded-2xl p-4 border border-green-200 text-green-800 font-bold">
+              ✅ {lang === 'fr' ? 'Aucune dette : la location est entièrement payée.' : 'لا يوجد دين: التأجير مدفوع بالكامل.'}
+            </div>
+          )}
 
           {/* Notes */}
           <div>
